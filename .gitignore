@@ -1,4 +1,4 @@
-﻿# Python bytecode & cache
+# Python bytecode & cache
 __pycache__/
 *.py[cod]
 *$py.class
@@ -25,6 +25,7 @@ ClearDrive_AI/
 *.jpg
 *.jpeg
 *.png
+!static/*.png
 
 # Local self-signed development SSL certificates
 key.pem
