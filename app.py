@@ -22,8 +22,18 @@ os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import threading
 import numpy as np
 from flask import Flask, Response, render_template, jsonify, request, send_from_directory
-
 from engine import OmniVisionEngine
+
+# Streamlit Community Cloud Autodetect Hook (if launched via 'streamlit run app.py')
+try:
+    import streamlit as st
+    if st.runtime.exists():
+        import streamlit_app
+        streamlit_app.main()
+        import sys
+        sys.exit(0)
+except Exception:
+    pass
 
 # Hugging Face ZeroGPU Registration Hook
 try:
