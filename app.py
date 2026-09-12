@@ -612,4 +612,6 @@ if __name__ == "__main__":
     print(f"  [+] Mobile Camera (HTTPS):  https://{local_ip}:5001/camera")
     print("=" * 70 + "\n")
 
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    # Dynamic Port Binding for Cloud Deployment (Hugging Face Spaces uses 7860, Render/local uses 5000)
+    server_port = int(os.environ.get('PORT', 7860 if 'SPACE_ID' in os.environ else 5000))
+    app.run(host='0.0.0.0', port=server_port, debug=False, threaded=True)
