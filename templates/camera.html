@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Clear-Drive AI | Mobile Dashcam Node</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #060911;
+            color: #00f3ff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            height: 100vh;
+            padding: 16px;
+            overflow: hidden;
+        }
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+        }
+        .brand { font-size: 1.1rem; font-weight: 900; letter-spacing: 1px; }
+        .status-pill {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border: 1px solid #00ff66;
+            background: rgba(0, 255, 102, 0.15);
+            color: #00ff66;
+        }
+        .preview-box {
+            position: relative;
+            width: 100%;
+            flex: 1;
+            margin: 14px 0;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid #142030;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .hud-overlay {
+            position: absolute;
+            top: 10px; left: 10px;
+            font-size: 0.75rem;
+            font-family: monospace;
+            color: rgba(255, 255, 255, 0.7);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .controls {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 1.05rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-broadcast {
+            background: #00ff66;
+            color: #031408;
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.6);
+        }
+        .btn-broadcast:active { transform: scale(0.98); }
+        .btn-stop {
+            background: #ff3344;
+            color: #fff;
+            box-shadow: 0 0 20px rgba(255, 51, 68, 0.6);
+        }
+        .footer-text {
+            font-size: 0.70rem;
+            color: #55708c;
+            text-align: center;
+            letter-spacing: 0.8px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">📱 CLEAR-DRIVE AI // MOBILE DASHCAM NODE</div>
+        <div id="statusPill" class="status-pill">STANDBY</div>
+    </header>
+
+    <div id="httpsWarning" style="display: none; width: 100%; background: rgba(255, 68, 85, 0.16); border: 2px solid #ff4455; border-radius: 8px; padding: 14px; margin-top: 10px; text-align: center; box-sizing: border-box;">
+        <div style="color: #ff4455; font-weight: 900; font-size: 1.0rem; margin-bottom: 6px; letter-spacing: 1px;">
+            🔒 HTTPS REQUIRED BY MOBILE CHROME
+        </div>
+        <div style="color: #cbdbe8; font-size: 0.82rem; line-height: 1.5; margin-bottom: 10px;">
+            Android Chrome blocks the camera on HTTP even when permission is granted. Tap below to switch to the secure stream:
+        </div>
+        <a id="httpsLink" href="#" style="display: block; background: #00f3ff; color: #050810; font-weight: 900; padding: 12px; border-radius: 6px; text-decoration: none; font-size: 0.95rem; letter-spacing: 1px; box-shadow: 0 0 15px rgba(0,243,255,0.6);">
+            ⚡ TAP TO OPEN SECURE HTTPS (PORT 5001)
+        </a>
+        <div style="color: #ffd700; font-size: 0.76rem; margin-top: 8px;">
+            (When Chrome says "Connection not private", tap <b>Advanced</b> &rarr; <b>Proceed</b>)
+        </div>
+    </div>
+
+    <div class="preview-box">
+        <video id="webcamVideo" autoplay playsinline muted></video>
+        <div class="hud-overlay" id="hudInfo">FPS: 0 | STREAM: IDLE</div>
+    </div>
+
+    <div class="controls">
+        <button id="broadcastBtn" class="btn-broadcast" onclick="toggleBroadcast()">
+            🚀 START BROADCASTING TO LAPTOP
+        </button>
+        <div class="footer-text">
+            POSITION PHONE ON DASHBOARD FACING FORWARD ROAD // TRANSMITTING IN 1080p HD
+        </div>
+    </div>
+
+    <canvas id="captureCanvas" style="display: none;"></canvas>
+
+    <script>
+        const video = document.getElementById('webcamVideo');
+        const canvas = document.getElementById('captureCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusPill = document.getElementById('statusPill');
+        const hudInfo = document.getElementById('hudInfo');
+        const broadcastBtn = document.getElementById('broadcastBtn');
+
+        let isStreaming = false;
+        let streamInterval = null;
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+        let currentFps = 0;
+
+        async function initCamera() {
+            // Android Chrome strictly requires a Secure Context (HTTPS or localhost)
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                const warnBox = document.getElementById('httpsWarning');
+                const httpsLink = document.getElementById('httpsLink');
+                const targetHttps = `https://${window.location.hostname}:5001/camera`;
+                if (httpsLink) httpsLink.href = targetHttps;
+                if (warnBox) warnBox.style.display = 'block';
+                statusPill.textContent = 'HTTPS REQUIRED';
+                statusPill.style.color = '#ff4455';
+                statusPill.style.borderColor = '#ff4455';
+                hudInfo.textContent = 'Android Chrome requires HTTPS for camera';
+                return;
+            }
+
+            try {
+                // Request back/rear camera for road dashcam view
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    canvas.width = 1280;
+                    canvas.height = 720;
+                    statusPill.textContent = 'CAMERA READY (720p HD)';
+                    statusPill.style.color = '#00ff66';
+                    statusPill.style.borderColor = '#00ff66';
+                    hudInfo.textContent = `FPS: IDLE | 720p FINE HD RESOLUTION`;
+                };
+            } catch (err) {
+                console.error('Camera access error:', err);
+                statusPill.textContent = 'CAMERA BLOCKED';
+                statusPill.style.color = '#ff3344';
+                statusPill.style.borderColor = '#ff3344';
+                alert('Camera error: ' + err.message);
+            }
+        }
+
+        function toggleBroadcast() {
+            if (!isStreaming) {
+                startBroadcast();
+            } else {
+                stopBroadcast();
+            }
+        }
+
+        let isUploading = false;
+        let broadcastTimer = null;
+
+        function startBroadcast() {
+            if (!video.srcObject) {
+                initCamera().then(() => {
+                    if (video.srcObject) startBroadcast();
+                });
+                return;
+            }
+
+            isStreaming = true;
+            isUploading = false;
+            statusPill.textContent = '● BROADCASTING 720p HD';
+            statusPill.style.color = '#00ff66';
+            statusPill.style.borderColor = '#00ff66';
+            broadcastBtn.textContent = '⏹️ STOP BROADCASTING';
+            broadcastBtn.className = 'btn-stop';
+
+            transmitNextFrame();
+        }
+
+        function scheduleNext() {
+            if (!isStreaming) return;
+            if ('requestVideoFrameCallback' in video) {
+                video.requestVideoFrameCallback(transmitNextFrame);
+            } else {
+                broadcastTimer = setTimeout(transmitNextFrame, 16);
+            }
+        }
+
+        function transmitNextFrame() {
+            if (!isStreaming) return;
+
+            // Skip frame if previous upload is still in-flight to prevent any queueing lag
+            if (isUploading || video.readyState < 2) {
+                scheduleNext();
+                return;
+            }
+
+            isUploading = true;
+            ctx.drawImage(video, 0, 0, 1280, 720);
+
+            // True 720p HD quality @ 0.78 (fine clarity, crisp edges)
+            canvas.toBlob((blob) => {
+                if (!blob || !isStreaming) {
+                    isUploading = false;
+                    scheduleNext();
+                    return;
+                }
+
+                fetch('/api/phone_frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'image/jpeg' },
+                    body: blob
+                })
+                .then(() => {
+                    frameCount++;
+                    const now = performance.now();
+                    if (now - lastFpsTime >= 1000) {
+                        currentFps = Math.round((frameCount * 1000) / (now - lastFpsTime));
+                        frameCount = 0;
+                        lastFpsTime = now;
+                        hudInfo.textContent = `⚡ LIVE FPS: ${currentFps} | 720p HD SMOOTH`;
+                    }
+                })
+                .catch(e => console.warn('Frame drop:', e))
+                .finally(() => {
+                    isUploading = false;
+                    scheduleNext();
+                });
+            }, 'image/jpeg', 0.78);
+        }
+
+        function stopBroadcast() {
+            isStreaming = false;
+            isUploading = false;
+            if (broadcastTimer) clearTimeout(broadcastTimer);
+            statusPill.textContent = 'STANDBY';
+            statusPill.style.color = '#ffd700';
+            statusPill.style.borderColor = '#ffd700';
+            broadcastBtn.textContent = '🚀 START BROADCASTING TO LAPTOP';
+            broadcastBtn.className = 'btn-broadcast';
+            hudInfo.textContent = 'STREAM: PAUSED';
+        }
+
+        // Auto start camera on page load
+        window.addEventListener('load', initCamera);
+    </script>
+</body>
+</html>

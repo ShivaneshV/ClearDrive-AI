@@ -1,0 +1,1935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLEAR-DRIVE AI | Predictive V2X Omni-Vision Cockpit</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,4 92,26 92,72 50,96 8,72 8,26' fill='%23060b14' stroke='%2300f3ff' stroke-width='6'/><circle cx='50' cy='50' r='14' fill='%23ff00ea'/><circle cx='50' cy='50' r='5' fill='%23ffffff'/></svg>">
+    <!-- Leaflet & Google Map Engine CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-base: #050811;
+            --panel-bg: #090e1a;
+            --panel-border: #142236;
+            --cyan-neon: #00f3ff;
+            --cyan-glow: rgba(0, 243, 255, 0.35);
+            --green-neon: #00ff66;
+            --amber-neon: #ffaa00;
+            --red-neon: #ff2244;
+            --purple-neon: #f000e6;
+            --orange-neon: #ff6600;
+            --font-mono: 'Consolas', 'Courier New', monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            background-color: var(--bg-base);
+            color: #d1e2f2;
+            font-family: var(--font-sans);
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Scanline Overlay */
+        body::after {
+            content: " ";
+            position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.35;
+        }
+
+        /* ------------------ HEADER WITH CUSTOM SVG LOGO ------------------ */
+        header {
+            background: rgba(9, 14, 26, 0.95);
+            border-bottom: 2px solid #00f3ff33;
+            padding: 10px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(12px);
+        }
+
+        .brand-container {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-svg-logo {
+            filter: drop-shadow(0 0 8px var(--cyan-glow));
+            animation: pulseLogo 3s infinite alternate;
+        }
+
+        @keyframes pulseLogo {
+            0% { filter: drop-shadow(0 0 6px var(--cyan-glow)); }
+            100% { filter: drop-shadow(0 0 14px rgba(240, 0, 230, 0.6)); }
+        }
+
+        .brand-title {
+            font-size: 1.35rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: #ffffff;
+        }
+        .brand-title span { color: var(--cyan-neon); text-shadow: 0 0 10px var(--cyan-glow); }
+        .brand-subtitle {
+            font-size: 0.70rem;
+            font-family: var(--font-mono);
+            letter-spacing: 1.5px;
+            color: #6d8ba6;
+            margin-top: 2px;
+        }
+
+        .header-status-strip {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            padding: 5px 12px;
+            border-radius: 4px;
+            letter-spacing: 1px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .badge-cyan { background: rgba(0, 243, 255, 0.12); border: 1px solid var(--cyan-neon); color: var(--cyan-neon); }
+        .badge-green { background: rgba(0, 255, 102, 0.12); border: 1px solid var(--green-neon); color: var(--green-neon); }
+        .badge-purple { background: rgba(240, 0, 230, 0.18); border: 1px solid var(--purple-neon); color: #ff66ff; animation: pulseTraction 1s infinite alternate; }
+        .badge-red { background: rgba(255, 34, 68, 0.20); border: 1px solid var(--red-neon); color: var(--red-neon); animation: pulseDanger 0.8s infinite; }
+
+        @keyframes pulseTraction {
+            from { box-shadow: 0 0 5px var(--purple-neon); }
+            to { box-shadow: 0 0 16px var(--purple-neon); }
+        }
+        @keyframes pulseDanger {
+            0%, 100% { background: rgba(255, 34, 68, 0.35); box-shadow: 0 0 16px var(--red-neon); }
+            50% { background: rgba(255, 34, 68, 0.10); box-shadow: 0 0 4px var(--red-neon); }
+        }
+
+        /* ------------------ MAIN COCKPIT LAYOUT ------------------ */
+        .cockpit-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            flex: 1;
+            width: 100%;
+        }
+
+        /* ------------------ TELEMETRY BAR & SPEEDOMETER ------------------ */
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+        }
+
+        .tele-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .tele-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 3px; height: 100%;
+            background: var(--cyan-neon);
+        }
+
+        .tele-label {
+            font-size: 0.68rem;
+            font-family: var(--font-mono);
+            letter-spacing: 1px;
+            color: #7b9bb5;
+            text-transform: uppercase;
+        }
+        .tele-value {
+            font-size: 1.25rem;
+            font-family: var(--font-mono);
+            font-weight: 900;
+            color: #ffffff;
+            margin-top: 4px;
+        }
+        .tele-sub {
+            font-size: 0.68rem;
+            font-family: var(--font-mono);
+            color: #4f708f;
+            margin-top: 2px;
+        }
+
+        .val-good { color: var(--green-neon); }
+        .val-warn { color: var(--amber-neon); }
+        .val-danger { color: var(--red-neon); text-shadow: 0 0 8px var(--red-neon); }
+
+        /* ------------------ VIDEO STREAM HUD BOX ------------------ */
+        .stream-wrapper {
+            position: relative;
+            background: #000;
+            border: 2px solid #192e4a;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+        }
+
+        #videoStream {
+            width: 100%;
+            height: auto;
+            max-height: 68vh;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* Over-Speed Alert Banner */
+        .overspeed-banner {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(180, 0, 20, 0.92);
+            border: 2px solid var(--red-neon);
+            color: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 0.95rem;
+            font-weight: bold;
+            padding: 8px 24px;
+            border-radius: 4px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            z-index: 100;
+            box-shadow: 0 0 20px rgba(255, 34, 68, 0.8);
+            animation: pulseDanger 0.8s infinite;
+        }
+
+        /* Autonomous Emergency Brake Banner */
+        .aeb-banner {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(220, 0, 30, 0.95);
+            border: 2px solid #ffffff;
+            color: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 1.05rem;
+            font-weight: 900;
+            letter-spacing: 1px;
+            padding: 10px 32px;
+            border-radius: 6px;
+            display: none;
+            align-items: center;
+            gap: 14px;
+            z-index: 100;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.9);
+            animation: pulseDanger 0.6s infinite;
+        }
+
+        /* ------------------ USER SCREENSHOT BUTTON MATRIX ------------------ */
+        .button-matrix-card {
+            background: #080e18;
+            border: 1px solid var(--cyan-neon);
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 0 16px rgba(0, 243, 255, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .matrix-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* Demo Dropdown Selector */
+        .hud-select {
+            flex: 1.4;
+            min-width: 280px;
+            background: #0b1322;
+            border: 1px solid var(--cyan-neon);
+            color: var(--cyan-neon);
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            font-weight: bold;
+            padding: 9px 14px;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.15);
+        }
+        .hud-select option {
+            background: #080e18;
+            color: #ffffff;
+        }
+
+        /* Tactile Matrix Buttons */
+        .hud-btn {
+            background: rgba(10, 18, 32, 0.85);
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            padding: 9px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            outline: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+        .hud-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.25);
+        }
+        .hud-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Distinct Colors matching Screenshot */
+        .btn-cyan { border: 1px solid var(--cyan-neon); color: var(--cyan-neon); }
+        .btn-cyan.btn-active { background: rgba(0, 243, 255, 0.25); box-shadow: 0 0 14px var(--cyan-neon); }
+
+        .btn-orange { border: 1px solid var(--orange-neon); color: var(--orange-neon); }
+        .btn-orange.btn-active { background: rgba(255, 102, 0, 0.25); box-shadow: 0 0 14px var(--orange-neon); }
+
+        .btn-magenta { border: 1px solid var(--purple-neon); color: var(--purple-neon); }
+        .btn-magenta.btn-active { background: rgba(240, 0, 230, 0.25); box-shadow: 0 0 14px var(--purple-neon); }
+
+        .btn-green { border: 1px solid var(--green-neon); color: var(--green-neon); }
+        .btn-green.btn-active { background: rgba(0, 255, 102, 0.25); box-shadow: 0 0 14px var(--green-neon); }
+
+        .btn-red { border: 1px solid var(--red-neon); color: var(--red-neon); }
+        .btn-red.btn-active { background: rgba(255, 34, 68, 0.30); box-shadow: 0 0 14px var(--red-neon); }
+
+        /* Secondary Action Controls Rail */
+        .actions-rail {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .action-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-sub {
+            background: #0f1a2e;
+            border: 1px solid #1f3554;
+            color: #8daac7;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 7px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-sub:hover {
+            color: #ffffff;
+            border-color: var(--cyan-neon);
+        }
+        .btn-sub.recording-pulse {
+            background: rgba(255, 0, 0, 0.25);
+            border-color: var(--red-neon);
+            color: var(--red-neon);
+            animation: pulseDanger 1s infinite;
+        }
+
+        /* ------------------ ACTIVE ENHANCEMENTS CHIPS ------------------ */
+        .chips-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .chip {
+            font-size: 0.70rem;
+            font-family: var(--font-mono);
+            padding: 3px 10px;
+            border-radius: 12px;
+            background: rgba(0, 243, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            color: #a8d5f2;
+        }
+
+        /* ------------------ CYBER V2X TERMINAL ------------------ */
+        .terminal-box {
+            background: #060a12;
+            border: 1px solid #142236;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            height: 90px;
+            overflow-y: auto;
+            color: #557999;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .term-line { display: flex; gap: 8px; }
+        .term-time { color: #35506b; }
+        .term-src { color: var(--cyan-neon); font-weight: bold; }
+        .term-msg { color: #b2cde5; }
+        .term-alert { color: var(--amber-neon); font-weight: bold; }
+        .term-crit { color: var(--red-neon); font-weight: bold; }
+
+        /* ------------------ MOBILE MODAL ------------------ */
+        .modal-backdrop {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        .modal-dialog {
+            background: #0a1120;
+            border: 2px solid var(--cyan-neon);
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.3);
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 520px;
+            width: 90%;
+            text-align: center;
+        }
+        .modal-title {
+            font-size: 1.25rem;
+            color: #ffffff;
+            font-weight: 900;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        .modal-url {
+            background: #04070d;
+            border: 1px dashed var(--cyan-neon);
+            color: var(--cyan-neon);
+            font-family: var(--font-mono);
+            font-size: 0.95rem;
+            padding: 12px;
+            border-radius: 4px;
+            word-break: break-all;
+            margin: 14px 0;
+            display: block;
+            text-decoration: none;
+        }
+        .modal-instructions {
+            font-size: 0.82rem;
+            color: #8daac7;
+            text-align: left;
+            line-height: 1.5;
+            margin-bottom: 18px;
+        }
+
+        /* ------------------ COCKPIT VIEWPORT & DUAL LAYOUT ------------------ */
+        .cockpit-viewport-grid {
+            display: grid;
+            grid-template-columns: 1.12fr 0.88fr;
+            gap: 14px;
+            align-items: stretch;
+            width: 100%;
+        }
+        .cockpit-viewport-grid.mode-cam {
+            grid-template-columns: 1fr !important;
+        }
+        .cockpit-viewport-grid.mode-cam #navPanel {
+            display: none !important;
+        }
+        .cockpit-viewport-grid.mode-map {
+            grid-template-columns: 1fr !important;
+        }
+        .cockpit-viewport-grid.mode-map #streamContainer {
+            display: none !important;
+        }
+        @media (max-width: 1080px) {
+            .cockpit-viewport-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ------------------ IN-COCKPIT NAVIGATION PANEL ------------------ */
+        .nav-panel {
+            background: #080d19;
+            border: 2px solid #142236;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+        }
+
+        .nav-header {
+            background: #0a1120;
+            border-bottom: 1px solid #162942;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .nav-title-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.80rem;
+            font-family: var(--font-mono);
+            font-weight: bold;
+            color: var(--cyan-neon);
+        }
+
+        .nav-layer-btns {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .nav-layer-btn {
+            background: #060912;
+            border: 1px solid #1a2d47;
+            color: #8daac7;
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .nav-layer-btn:hover, .nav-layer-btn.layer-active {
+            color: #ffffff;
+            border-color: var(--cyan-neon);
+            background: rgba(0, 243, 255, 0.18);
+            box-shadow: 0 0 8px var(--cyan-glow);
+        }
+
+        /* Search Bar & Autocomplete Suggestions Dropdown */
+        .nav-search-bar {
+            display: flex;
+            padding: 8px 12px;
+            background: #050811;
+            border-bottom: 1px solid #142236;
+            gap: 8px;
+            position: relative;
+            z-index: 1200;
+        }
+
+        .nav-search-wrapper {
+            position: relative;
+            flex: 1;
+            display: flex;
+        }
+
+        .nav-input {
+            width: 100%;
+            background: #09101d;
+            border: 1px solid #1e3552;
+            color: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 0.80rem;
+            padding: 8px 12px;
+            border-radius: 4px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .nav-input:focus {
+            border-color: var(--cyan-neon);
+            box-shadow: 0 0 8px var(--cyan-glow);
+        }
+
+        .nav-suggestions-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: rgba(9, 14, 26, 0.98);
+            border: 1px solid var(--cyan-neon);
+            border-radius: 6px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.9), 0 0 14px var(--cyan-glow);
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 99999;
+            backdrop-filter: blur(12px);
+        }
+
+        .suggestion-item {
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(20, 34, 54, 0.8);
+            transition: background 0.15s;
+        }
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+        .suggestion-item:hover, .suggestion-item.active {
+            background: rgba(0, 243, 255, 0.22);
+        }
+        .suggestion-icon {
+            font-size: 1rem;
+            color: var(--cyan-neon);
+            flex-shrink: 0;
+        }
+        .suggestion-text-group {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            text-align: left;
+        }
+        .suggestion-title {
+            font-size: 0.80rem;
+            font-weight: 600;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .suggestion-subtitle {
+            font-size: 0.68rem;
+            color: #7b9bb9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: var(--font-mono);
+        }
+
+        .nav-search-btn {
+            background: rgba(0, 243, 255, 0.15);
+            border: 1px solid var(--cyan-neon);
+            color: var(--cyan-neon);
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            font-weight: bold;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .nav-search-btn:hover {
+            background: var(--cyan-neon);
+            color: #000;
+        }
+
+        /* Map Canvas */
+        #navMap {
+            width: 100%;
+            height: 360px;
+            min-height: 280px;
+            flex: 1;
+            background: #04070e;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Guidance Card */
+        .nav-guidance-card {
+            background: #060a14;
+            border-top: 1px solid #14253d;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .guidance-metric {
+            display: flex;
+            flex-direction: column;
+        }
+        .guidance-metric-lbl {
+            font-size: 0.65rem;
+            font-family: var(--font-mono);
+            color: #6484a4;
+            text-transform: uppercase;
+        }
+        .guidance-metric-val {
+            font-size: 1.05rem;
+            font-family: var(--font-mono);
+            font-weight: 900;
+            color: #ffffff;
+        }
+        .guidance-maneuver {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: #00f3ff;
+            max-width: 240px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .gmaps-launch-btn {
+            background: #1a73e8;
+            color: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            font-weight: bold;
+            padding: 6px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .gmaps-launch-btn:hover {
+            background: #1557b0;
+            box-shadow: 0 0 12px rgba(26, 115, 232, 0.8);
+        }
+
+        /* Pulsing Vehicle Marker */
+        .custom-vehicle-icon {
+            background: transparent;
+            border: none;
+        }
+        .vehicle-marker-icon {
+            position: relative;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .vehicle-marker-pulse {
+            position: absolute;
+            top: -6px;
+            left: -6px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(0, 243, 255, 0.4);
+            animation: markerPulse 1.6s infinite ease-out;
+        }
+        @keyframes markerPulse {
+            0% { transform: scale(0.4); opacity: 1; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- AUDIO SOUND EFFECTS (Web Audio API Synthesizers) -->
+    <script>
+        let audioCtx = null;
+        let sirenOsc = null;
+        let sirenGain = null;
+
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        function playSiren() {
+            try {
+                const ctx = getAudioContext();
+                if (sirenOsc) return;
+                sirenOsc = ctx.createOscillator();
+                sirenGain = ctx.createGain();
+                sirenOsc.type = 'sawtooth';
+                sirenGain.gain.setValueAtTime(0.08, ctx.currentTime);
+
+                const now = ctx.currentTime;
+                sirenOsc.frequency.setValueAtTime(650, now);
+                sirenOsc.frequency.linearRampToValueAtTime(950, now + 0.18);
+                sirenOsc.frequency.linearRampToValueAtTime(650, now + 0.36);
+
+                sirenOsc.connect(sirenGain);
+                sirenGain.connect(ctx.destination);
+                sirenOsc.start();
+            } catch (e) {}
+        }
+
+        function stopSiren() {
+            if (sirenOsc) {
+                try {
+                    sirenOsc.stop();
+                    sirenOsc.disconnect();
+                } catch (e) {}
+                sirenOsc = null;
+                sirenGain = null;
+            }
+        }
+
+        function playChime() {
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                osc.frequency.setValueAtTime(1174, ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.06, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.35);
+            } catch (e) {}
+        }
+    </script>
+
+    <!-- HEADER WITH CUSTOM LOGO -->
+    <header>
+        <div class="brand-container">
+            <svg class="brand-svg-logo" viewBox="0 0 100 100" width="44" height="44">
+                <defs>
+                    <linearGradient id="cyberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#00f3ff"/>
+                        <stop offset="100%" stop-color="#0066ff"/>
+                    </linearGradient>
+                    <filter id="glow">
+                        <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                </defs>
+                <polygon points="50,4 92,26 92,72 50,96 8,72 8,26" fill="rgba(0, 243, 255, 0.08)" stroke="url(#cyberGrad)" stroke-width="3.5" filter="url(#glow)"/>
+                <path d="M 22 58 L 50 32 L 78 58" fill="none" stroke="#00f3ff" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M 32 68 L 50 48 L 68 68" fill="none" stroke="#00ff66" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="50" cy="50" r="8" fill="#ff00ea" filter="url(#glow)"/>
+                <circle cx="50" cy="50" r="3" fill="#ffffff"/>
+                <line x1="14" y1="50" x2="86" y2="50" stroke="rgba(0, 243, 255, 0.5)" stroke-width="1.5" stroke-dasharray="3,3"/>
+            </svg>
+            <div>
+                <div class="brand-title">CLEAR-DRIVE <span>AI</span></div>
+                <div class="brand-subtitle">PREDICTIVE V2X OMNI-VISION // COMMERCIAL ADAS PROTOTYPE</div>
+            </div>
+        </div>
+
+        <div class="header-status-strip">
+            <div id="climateBadge" class="status-badge badge-cyan">CLIMATE: ADAPTIVE AUTO</div>
+            <div id="tractionBadge" class="status-badge badge-cyan">HYDRO-GRIP: OPTIMAL</div>
+            <div id="aebBadge" class="status-badge badge-green">AEB: ARMED</div>
+        </div>
+    </header>
+
+    <!-- COCKPIT BODY -->
+    <div class="cockpit-container">
+
+        <!-- TELEMETRY CARDS -->
+        <div class="telemetry-grid">
+            <div class="tele-card">
+                <div class="tele-label">SYSTEM ENGINE</div>
+                <div id="t-fps" class="tele-value val-good">30.0 FPS</div>
+                <div id="t-latency" class="tele-sub">0.0 ms LATENCY</div>
+            </div>
+            <div class="tele-card">
+                <div class="tele-label">SPEEDOMETER</div>
+                <div id="t-speed" class="tele-value val-good">74 km/h</div>
+                <div id="t-limit" class="tele-sub">LIMIT: 80 km/h</div>
+            </div>
+            <div class="tele-card">
+                <div class="tele-label">CLOSEST VEHICLE</div>
+                <div id="t-closest" class="tele-value">--</div>
+                <div id="t-ttc" class="tele-sub">TTC: --</div>
+            </div>
+            <div class="tele-card">
+                <div class="tele-label">TARGETS TRACKED</div>
+                <div id="t-vehicles" class="tele-value">0</div>
+                <div class="tele-sub">YOLOv8 VRU RADAR</div>
+            </div>
+            <div class="tele-card">
+                <div class="tele-label">ROAD POTHOLES</div>
+                <div id="t-potholes" class="tele-value val-good">0</div>
+                <div class="tele-sub">3D ASPHALT ISOLATED</div>
+            </div>
+            <div class="tele-card">
+                <div class="tele-label">GPS ROAD NODE</div>
+                <div class="tele-value" style="font-size: 0.95rem;">NH-48 EXPRESS</div>
+                <div id="t-gps" class="tele-sub">18.5204° N, 73.8567° E</div>
+            </div>
+        </div>
+
+        <!-- COCKPIT VIEWPORT (DUAL CAMERA + INTERACTIVE NAVIGATION MAP) -->
+        <div class="cockpit-viewport-grid mode-dual" id="cockpitViewport">
+            <!-- Camera Viewport -->
+            <div class="stream-wrapper" id="streamContainer">
+                <!-- Flashing Over-Speed Warning Banner -->
+                <div class="overspeed-banner" id="overspeedBanner">
+                    <span>🚨</span>
+                    <span id="overspeedText">OVER-SPEED WARNING: 78 km/h EXCEEDS SAFE LIMIT (60 km/h)</span>
+                </div>
+
+                <!-- Flashing Autonomous Emergency Brake Banner -->
+                <div class="aeb-banner" id="autobrakeBanner">
+                    <span>⚠️</span>
+                    <span>COLLISION IMMINENT // AUTONOMOUS EMERGENCY BRAKE PRE-ARMED</span>
+                    <span id="bannerTtc" style="color: #ffea00;">TTC: 0.8s</span>
+                </div>
+
+                <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream">
+            </div>
+
+            <!-- Interactive In-Cockpit Google Maps Navigation Panel -->
+            <div class="nav-panel" id="navPanel">
+                <!-- Nav Header -->
+                <div class="nav-header">
+                    <div class="nav-title-group">
+                        <span>🗺️ GOOGLE-SYNC NAVIGATOR</span>
+                        <span id="gpsStatusPill" class="status-badge badge-green" style="font-size: 0.65rem; padding: 2px 7px;">GPS ACTIVE</span>
+                    </div>
+                    <div class="nav-layer-btns">
+                        <button class="nav-layer-btn" id="btn-layer-sat" onclick="switchMapLayer('satellite')">🛰️ SATELLITE</button>
+                        <button class="nav-layer-btn" id="btn-layer-traffic" onclick="switchMapLayer('traffic')">🚦 TRAFFIC</button>
+                        <button class="nav-layer-btn" id="btn-layer-road" onclick="switchMapLayer('roadmap')">🗺️ ROAD</button>
+                        <button class="nav-layer-btn layer-active" id="btn-layer-dark" onclick="switchMapLayer('dark')">🕶️ CYBER</button>
+                    </div>
+                </div>
+
+                <!-- Destination Search & Routing Bar with Live Autocomplete -->
+                <div class="nav-search-bar">
+                    <div class="nav-search-wrapper">
+                        <input type="text" id="destSearchInput" class="nav-input" placeholder="Search destination (e.g. Airport, Taj Mahal, Connaught Place)..." autocomplete="off" oninput="handleSearchInput(this.value)" onkeydown="handleSearchKey(event)">
+                        <div id="navSuggestionsDropdown" class="nav-suggestions-dropdown" style="display: none;"></div>
+                    </div>
+                    <button class="nav-search-btn" id="btnSearchRoute" onclick="searchAndRoute()">NAVIGATE 🚗</button>
+                    <button class="nav-search-btn" style="padding: 8px 10px;" onclick="recenterVehicle()" title="Recenter to car GPS">🎯</button>
+                </div>
+
+                <!-- Interactive Leaflet / Google Map Container -->
+                <div id="navMap"></div>
+
+                <!-- Live Route Guidance & Turn-by-Turn Card -->
+                <div class="nav-guidance-card">
+                    <div class="guidance-metric">
+                        <span class="guidance-metric-lbl">DESTINATION</span>
+                        <span class="guidance-maneuver" id="routeDestLabel">NH-48 EXPRESS ROUTE</span>
+                    </div>
+                    <div class="guidance-metric">
+                        <span class="guidance-metric-lbl">DISTANCE</span>
+                        <span class="guidance-metric-val" id="routeDistVal" style="color: var(--cyan-neon);">-- km</span>
+                    </div>
+                    <div class="guidance-metric">
+                        <span class="guidance-metric-lbl">ESTIMATED ETA</span>
+                        <span class="guidance-metric-val" id="routeEtaVal" style="color: var(--green-neon);">-- mins</span>
+                    </div>
+                    <a id="gmapsExternalLink" href="https://maps.google.com" target="_blank" class="gmaps-launch-btn">
+                        <span>↗</span> OPEN IN GOOGLE MAPS APP
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- EXACT BUTTON MATRIX FROM USER'S SCREENSHOT (media_1789220343574.png) -->
+        <div class="button-matrix-card">
+            <!-- Row 1: Dropdown Clip Selector & Optics -->
+            <div class="matrix-row">
+                <select id="videoSelect" class="hud-select" onchange="changeSource()">
+                    <option value="traffic_dashcam.mp4">🚗 Demo 8: Highway Traffic & Distance (traffic_dashcam.mp4)</option>
+                    <option value="foggy_dashcam.mp4">🌫️ Demo 1: Dense Himalayan Fog (foggy_dashcam.mp4)</option>
+                    <option value="indian_rain.mp4">🌧️ Demo 2: Heavy Monsoon Rain (indian_rain.mp4)</option>
+                    <option value="night_dashcam.mp4">🌙 Demo 3: Dark Night Highway (night_dashcam.mp4)</option>
+                    <option value="glare_dashcam.mp4">☀️ Demo 4: High-Beam Glare & Snow (glare_dashcam.mp4)</option>
+                    <option value="pothole_dashcam.mp4">⚠️ Demo 6: Urban Road Potholes (pothole_dashcam.mp4)</option>
+                    <option value="phone">📱 Live Mobile Dashcam (Wireless Node)</option>
+                    <option value="0">📷 Laptop Webcam (Port 0)</option>
+                    <option value="1">📱 USB Dashcam (Port 1)</option>
+                </select>
+
+                <button class="hud-btn btn-cyan" id="btn-fog" onclick="toggleFeature('fog')">
+                    <span>🌫️</span> FOG / RAIN [1]
+                </button>
+                <button class="hud-btn btn-magenta" id="btn-night" onclick="toggleFeature('night')">
+                    <span>🌙</span> NIGHT VISION [N]
+                </button>
+                <button class="hud-btn btn-cyan" id="btn-lidar" onclick="toggleFeature('lidar')">
+                    <span>🌐</span> CYBER-LIDAR [2]
+                </button>
+                <button class="hud-btn btn-orange" id="btn-thermal" onclick="toggleFeature('thermal')">
+                    <span>🔥</span> THERMAL OPTICS [3]
+                </button>
+            </div>
+
+            <!-- Row 2: Tactical Sensors & Fullscreen -->
+            <div class="matrix-row">
+                <button class="hud-btn btn-cyan btn-active" id="btn-lanes" onclick="toggleFeature('lanes')">
+                    <span>🛣️</span> AR LANES [4]
+                </button>
+                <button class="hud-btn btn-magenta" id="btn-glare" onclick="toggleFeature('glare')">
+                    <span>😎</span> ANTI-GLARE [5]
+                </button>
+                <button class="hud-btn btn-green btn-active" id="btn-potholes" onclick="toggleFeature('potholes')">
+                    <span>⚠️</span> ROAD POTHOLES [6]
+                </button>
+                <button class="hud-btn btn-cyan btn-active" id="btn-radar" onclick="toggleFeature('radar')">
+                    <span>🚗</span> VEHICLE RADAR & TTC [7]
+                </button>
+                <button class="hud-btn btn-red" id="btn-raw" onclick="toggleFeature('raw')">
+                    <span>🟥</span> RAW ONLY [8]
+                </button>
+                <button class="hud-btn btn-green" id="btn-fullscreen" onclick="toggleFullscreen()">
+                    <span>[ ]</span> TV FULLSCREEN (F)
+                </button>
+            </div>
+        </div>
+
+        <!-- SECONDARY ACTION CONTROLS RAIL -->
+        <div class="actions-rail">
+            <div class="action-group">
+                <button class="btn-sub btn-active" id="btn-layout-dual" onclick="setLayoutMode('dual')">
+                    🚗 DUAL (CAM + MAP)
+                </button>
+                <button class="btn-sub" id="btn-layout-cam" onclick="setLayoutMode('cam')">
+                    📷 CAM ONLY
+                </button>
+                <button class="btn-sub" id="btn-layout-map" onclick="setLayoutMode('map')">
+                    🗺️ MAP ONLY [M]
+                </button>
+                <button class="btn-sub" id="btn-split" onclick="toggleSplitView()">
+                    🔄 SPLIT VIEW (RAW vs AI)
+                </button>
+                <button class="btn-sub" onclick="triggerV2V()">
+                    📡 SIMULATE V2V HAZARD
+                </button>
+                <button class="btn-sub" onclick="toggleTractionDemo()">
+                    ❄️ DEMO BLACK ICE HAZARD
+                </button>
+                <button class="btn-sub" id="recBtn" onclick="toggleRecording()">
+                    🔴 REC DVR (NO SD CARD)
+                </button>
+                <button class="btn-sub" id="downloadBtn" onclick="downloadRecording()" style="display:none;">
+                    💾 DOWNLOAD DVR FOOTAGE
+                </button>
+            </div>
+
+            <div class="action-group">
+                <button class="btn-sub" onclick="openMobileModal()" style="border-color: var(--cyan-neon); color: var(--cyan-neon);">
+                    📱 CONNECT MOBILE DASHCAM
+                </button>
+            </div>
+        </div>
+
+        <!-- ACTIVE PERCEPTION ENHANCEMENTS -->
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-size: 0.72rem; font-family: var(--font-mono); color: #5a7d9e;">
+                COGNITIVE PERCEPTION PIPELINE:
+            </div>
+            <div class="chips-container" id="chipsContainer"></div>
+        </div>
+
+        <!-- CYBER V2X TERMINAL -->
+        <div class="terminal-box" id="terminalBox">
+            <div class="term-line">
+                <span class="term-time">[00:00:00]</span>
+                <span class="term-src">[SYSTEM]</span>
+                <span class="term-msg">CLEAR-DRIVE AI KERNEL V2.4 INITIALIZED // 100% OFFLINE STABLE</span>
+            </div>
+            <div class="term-line">
+                <span class="term-time">[00:00:01]</span>
+                <span class="term-src">[PERCEPTION]</span>
+                <span class="term-msg">3D ASPHALT CORRIDOR LOCKED // HSV TREE REJECTION ARMED</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MOBILE DASHCAM CONNECT MODAL -->
+    <div class="modal-backdrop" id="mobileModal" onclick="closeMobileModal(event)">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-title">📱 CONNECT YOUR PHONE AS DASHCAM</div>
+            <p style="color: #688fa8; font-size: 0.85rem; margin-bottom: 8px;">
+                Stream 720p HD Dashcam video directly from your phone into the AI engine over secure HTTPS.
+            </p>
+
+            <a class="modal-url" id="modalUrlLink" href="https://{{ local_ip }}:5001/camera" target="_blank">
+                https://{{ local_ip }}:5001/camera
+            </a>
+
+            <div class="modal-instructions">
+                1. Make sure your phone is connected to the same Wi-Fi or Mobile Hotspot.<br>
+                2. Open the URL above in Chrome or Safari on your phone.<br>
+                3. When prompted by the browser, tap <strong>ALLOW</strong> for Camera access.<br>
+                4. Tap <strong>ADVANCED &rarr; PROCEED</strong> if prompted with SSL security screen.<br>
+                5. Mount your phone on your car dashboard &mdash; it streams live with zero lag!
+            </div>
+
+            <button class="hud-btn btn-cyan" style="width: 100%; justify-content: center;" onclick="closeMobileModal()">
+                DONE / RETURN TO COCKPIT
+            </button>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT COCKPIT CONTROLLER -->
+    <script>
+        let splitViewActive = false;
+        let lastV2VEventStr = '';
+        let lastOverspeedState = false;
+
+        // Current Active Features State Matrix
+        let activeFeatures = {
+            fog: false,
+            night: false,
+            lidar: false,
+            thermal: false,
+            lanes: true,
+            glare: false,
+            potholes: true,
+            radar: true,
+            raw: false
+        };
+
+        // Navigation & Live GPS State
+        let navMap = null;
+        let mapLayers = {};
+        let currentMapLayer = 'dark';
+        let vehicleMarker = null;
+        let routePolyline = null;
+        let destMarker = null;
+        let currentVehicleLat = 18.5204;
+        let currentVehicleLon = 73.8567;
+        let currentVehicleHeading = 0;
+        let currentVehicleSpeed = 74;
+        let currentLayoutMode = 'dual';
+
+        // Sound activation on first click
+        window.addEventListener('click', () => { getAudioContext(); }, { once: true });
+
+        // Keyboard Shortcuts (1-8, N, F, M)
+        window.addEventListener('keydown', (e) => {
+            // Ignore keystrokes when typing inside inputs
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+
+            const key = e.key.toLowerCase();
+            if (key === '1') toggleFeature('fog');
+            else if (key === 'n' || key === '9') toggleFeature('night');
+            else if (key === '2') toggleFeature('lidar');
+            else if (key === '3') toggleFeature('thermal');
+            else if (key === '4') toggleFeature('lanes');
+            else if (key === '5') toggleFeature('glare');
+            else if (key === '6') toggleFeature('potholes');
+            else if (key === '7') toggleFeature('radar');
+            else if (key === '8') toggleFeature('raw');
+            else if (key === 'f') toggleFullscreen();
+            else if (key === 'm') toggleViewLayout();
+        });
+
+        // ------------------ MULTI-FEATURE INDEPENDENT CONCURRENCY ------------------
+        function toggleFeature(featName) {
+            playChime();
+
+            // Optimistic UI state flip
+            if (featName === 'raw') {
+                activeFeatures.raw = !activeFeatures.raw;
+            } else {
+                activeFeatures[featName] = !activeFeatures[featName];
+                if (activeFeatures[featName]) {
+                    activeFeatures.raw = false;
+                }
+            }
+            updateFeatureButtons(activeFeatures);
+
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ toggle_feature: featName })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.features) {
+                    activeFeatures = data.features;
+                    updateFeatureButtons(data.features);
+                }
+                const stateStr = activeFeatures[featName] ? 'ENGAGED [ON]' : 'DISENGAGED [OFF]';
+                addTerminalLog('SENSOR-CTL', `Feature ${featName.toUpperCase()}: ${stateStr}`);
+            })
+            .catch(e => console.error(e));
+        }
+
+        function updateFeatureButtons(features) {
+            const btnMap = {
+                'fog': 'btn-fog',
+                'night': 'btn-night',
+                'lidar': 'btn-lidar',
+                'thermal': 'btn-thermal',
+                'lanes': 'btn-lanes',
+                'glare': 'btn-glare',
+                'potholes': 'btn-potholes',
+                'radar': 'btn-radar',
+                'raw': 'btn-raw'
+            };
+            for (const [feat, btnId] of Object.entries(btnMap)) {
+                const el = document.getElementById(btnId);
+                if (el) {
+                    if (features[feat]) {
+                        el.classList.add('btn-active');
+                    } else {
+                        el.classList.remove('btn-active');
+                    }
+                }
+            }
+        }
+
+        function changeSource() {
+            const val = document.getElementById('videoSelect').value;
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: val })
+            })
+            .then(res => res.json())
+            .then(d => addTerminalLog('SRC-SWITCH', `Stream source routed to: ${val.toUpperCase()}`))
+            .catch(e => console.error(e));
+        }
+
+        function toggleSplitView() {
+            splitViewActive = !splitViewActive;
+            const btn = document.getElementById('btn-split');
+            if (splitViewActive) btn.classList.add('btn-active');
+            else btn.classList.remove('btn-active');
+
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ split_view: splitViewActive })
+            })
+            .then(res => res.json())
+            .then(d => addTerminalLog('VIEW-CTL', `Split View Mode: ${splitViewActive ? 'SIDE-BY-SIDE (RAW vs AI)' : 'FULL PANORAMIC HUD'}`))
+            .catch(e => console.error(e));
+        }
+
+        function triggerV2V() {
+            fetch('/api/v2v_trigger', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                const p = data.payload;
+                addTerminalLog(p.source, `V2V BROADCAST: ${p.event} (${p.distance})`, 'v2v');
+            })
+            .catch(e => console.error(e));
+        }
+
+        let tractionDemoState = false;
+        function toggleTractionDemo() {
+            tractionDemoState = !tractionDemoState;
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ traction_demo: tractionDemoState })
+            })
+            .then(res => res.json())
+            .then(d => addTerminalLog('HYDRO-GRIP', `Traction Demo: ${tractionDemoState ? 'BLACK ICE PREDICTED (PURPLE)' : 'CLEAR ASPHALT'}`))
+            .catch(e => console.error(e));
+        }
+
+        function toggleFullscreen() {
+            const elem = document.getElementById('streamContainer');
+            if (!document.fullscreenElement) {
+                elem.requestFullscreen().catch(err => console.error(err));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // ------------------ COCKPIT VIEWPORT LAYOUT SWITCHER ------------------
+        function setLayoutMode(mode) {
+            currentLayoutMode = mode;
+            const grid = document.getElementById('cockpitViewport');
+            grid.className = 'cockpit-viewport-grid mode-' + mode;
+
+            ['btn-layout-dual', 'btn-layout-cam', 'btn-layout-map'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.classList.remove('btn-active');
+            });
+            const active = document.getElementById('btn-layout-' + mode);
+            if (active) active.classList.add('btn-active');
+
+            setTimeout(() => {
+                if (navMap) navMap.invalidateSize();
+            }, 200);
+
+            addTerminalLog('COCKPIT-LAYOUT', `View mode set to: ${mode.toUpperCase()}`);
+        }
+
+        function toggleViewLayout() {
+            if (currentLayoutMode === 'dual') setLayoutMode('cam');
+            else if (currentLayoutMode === 'cam') setLayoutMode('map');
+            else setLayoutMode('dual');
+        }
+
+        // ------------------ IN-COCKPIT GOOGLE MAPS & ROUTING ENGINE ------------------
+        function initNavMap() {
+            try {
+                if (typeof L === 'undefined') {
+                    setTimeout(initNavMap, 400);
+                    return;
+                }
+                if (navMap) return;
+
+                navMap = L.map('navMap', {
+                    center: [currentVehicleLat, currentVehicleLon],
+                    zoom: 14,
+                    zoomControl: true,
+                    attributionControl: false
+                });
+
+                // Google & Cyber Dark Tile Layers
+                mapLayers.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+                mapLayers.satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+                mapLayers.traffic = L.tileLayer('https://mt1.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}', { maxZoom: 20 });
+                mapLayers.roadmap = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20 });
+
+                mapLayers.dark.addTo(navMap);
+
+                // Vehicle Pulsing Cyber Marker
+                const vehicleIcon = L.divIcon({
+                    className: 'custom-vehicle-icon',
+                    html: `<div class="vehicle-marker-icon">
+                             <div class="vehicle-marker-pulse"></div>
+                             <svg id="carSvgMarker" viewBox="0 0 24 24" width="22" height="22" style="transform: rotate(${currentVehicleHeading}deg); filter: drop-shadow(0 0 5px #00f3ff);">
+                               <polygon points="12,2 22,22 12,17 2,22" fill="#00f3ff" stroke="#ffffff" stroke-width="1.5"/>
+                             </svg>
+                           </div>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+
+                vehicleMarker = L.marker([currentVehicleLat, currentVehicleLon], { icon: vehicleIcon }).addTo(navMap);
+                vehicleMarker.bindPopup("<b>CLEAR-DRIVE AI VEHICLE</b><br>Speed: " + currentVehicleSpeed + " km/h");
+
+                // Default initial route
+                calculateRouteTo(18.7557, 73.4091, "Lonavala Ghat (NH-48 Expressway)");
+
+                addTerminalLog('NAV-SYSTEM', 'Google Maps & OSRM Routing Engine Online.');
+            } catch (err) {
+                console.warn("Map init notice:", err);
+            }
+        }
+
+        function switchMapLayer(layerKey) {
+            if (!navMap) return;
+            const btnMap = {
+                'satellite': 'btn-layer-sat',
+                'traffic': 'btn-layer-traffic',
+                'roadmap': 'btn-layer-road',
+                'dark': 'btn-layer-dark'
+            };
+            Object.values(btnMap).forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.classList.remove('layer-active');
+            });
+
+            const activeBtn = document.getElementById(btnMap[layerKey]);
+            if (activeBtn) activeBtn.classList.add('layer-active');
+
+            for (const key in mapLayers) {
+                if (navMap.hasLayer(mapLayers[key])) {
+                    navMap.removeLayer(mapLayers[key]);
+                }
+            }
+
+            if (mapLayers[layerKey]) {
+                mapLayers[layerKey].addTo(navMap);
+                currentMapLayer = layerKey;
+                addTerminalLog('NAV-MAP', `Map Layer switched to: ${layerKey.toUpperCase()}`);
+            }
+        }
+
+        // High-Frequency Known Landmarks Database (Airports, Tourist Sites, Business Hubs, Cities)
+        const KNOWN_LANDMARKS = [
+            { name: "Chhatrapati Shivaji Maharaj Int Airport (BOM)", subtitle: "Mumbai, Maharashtra, India", lat: 19.0896, lon: 72.8656, tags: ["airport", "bom", "mumbai", "international"] },
+            { name: "Indira Gandhi International Airport (DEL)", subtitle: "New Delhi, Delhi, India", lat: 28.5562, lon: 77.1000, tags: ["airport", "delhi", "del", "igi", "international"] },
+            { name: "Kempegowda International Airport (BLR)", subtitle: "Bengaluru, Karnataka, India", lat: 13.1986, lon: 77.7066, tags: ["airport", "bangalore", "bengaluru", "blr"] },
+            { name: "Rajiv Gandhi International Airport (HYD)", subtitle: "Hyderabad, Telangana, India", lat: 17.2403, lon: 78.4294, tags: ["airport", "hyderabad", "hyd"] },
+            { name: "Chennai International Airport (MAA)", subtitle: "Chennai, Tamil Nadu, India", lat: 12.9941, lon: 80.1709, tags: ["airport", "chennai", "madras", "maa"] },
+            { name: "Taj Mahal", subtitle: "Dharmapuri, Forest Colony, Agra, UP", lat: 27.1751, lon: 78.0421, tags: ["taj mahal", "agra", "monument", "wonder"] },
+            { name: "Gateway of India", subtitle: "Apollo Bandar, Colaba, Mumbai", lat: 18.9220, lon: 72.8347, tags: ["gateway of india", "mumbai", "colaba", "sea"] },
+            { name: "India Gate", subtitle: "Rajpath, Central Secretariat, New Delhi", lat: 28.6129, lon: 77.2295, tags: ["india gate", "delhi", "rajpath", "monument"] },
+            { name: "Connaught Place", subtitle: "Central Delhi, New Delhi", lat: 28.6315, lon: 77.2167, tags: ["connaught place", "cp", "delhi", "center"] },
+            { name: "Bandra-Worli Sea Link", subtitle: "Mumbai, Maharashtra", lat: 19.0330, lon: 72.8150, tags: ["sea link", "bandra", "worli", "bridge", "mumbai"] },
+            { name: "Marine Drive (Queen's Necklace)", subtitle: "Netaji Subhash Chandra Bose Rd, Mumbai", lat: 18.9432, lon: 72.8234, tags: ["marine drive", "mumbai", "nariman point"] },
+            { name: "Cyber City / DLF CyberHub", subtitle: "DLF Phase 2, Gurugram, Haryana", lat: 28.4950, lon: 77.0895, tags: ["cyber city", "cyberhub", "gurugram", "gurgaon"] },
+            { name: "MG Road & Brigade Road", subtitle: "Shanthala Nagar, Ashok Nagar, Bengaluru", lat: 12.9756, lon: 77.6066, tags: ["mg road", "bangalore", "bengaluru", "brigade"] },
+            { name: "Electronic City", subtitle: "Bengaluru, Karnataka", lat: 12.8452, lon: 77.6602, tags: ["electronic city", "bangalore", "tech hub"] },
+            { name: "HITEC City / Madhapur", subtitle: "Hyderabad, Telangana", lat: 17.4435, lon: 78.3772, tags: ["hitec city", "hyderabad", "tech hub"] },
+            { name: "Bandra Kurla Complex (BKC)", subtitle: "Bandra East, Mumbai, Maharashtra", lat: 19.0657, lon: 72.8683, tags: ["bkc", "bandra kurla complex", "mumbai"] },
+            { name: "Golden Temple (Harmandir Sahib)", subtitle: "Amritsar, Punjab, India", lat: 31.6200, lon: 74.8765, tags: ["golden temple", "amritsar", "punjab"] },
+            { name: "Hawa Mahal", subtitle: "Badi Choupad, J.D.A. Market, Jaipur, Rajasthan", lat: 26.9239, lon: 75.8267, tags: ["hawa mahal", "jaipur", "rajasthan"] },
+            { name: "Charminar", subtitle: "Old City, Hyderabad, Telangana", lat: 17.3616, lon: 78.4747, tags: ["charminar", "hyderabad", "old city"] },
+            { name: "Victoria Memorial", subtitle: "Maidan, Kolkata, West Bengal", lat: 22.5448, lon: 88.3426, tags: ["victoria memorial", "kolkata", "calcutta"] },
+            { name: "Pune City Center (FC Road)", subtitle: "Shivajinagar, Pune, Maharashtra", lat: 18.5204, lon: 73.8567, tags: ["pune", "fc road", "shivajinagar"] },
+            { name: "Sabarmati Riverfront", subtitle: "Ahmedabad, Gujarat, India", lat: 23.0300, lon: 72.5800, tags: ["ahmedabad", "sabarmati", "gujarat"] },
+            { name: "Times Square", subtitle: "Manhattan, New York, NY, USA", lat: 40.7580, lon: -73.9855, tags: ["times square", "new york", "nyc", "usa"] },
+            { name: "Burj Khalifa", subtitle: "1 Sheikh Mohammed bin Rashid Blvd, Dubai, UAE", lat: 25.1972, lon: 55.2744, tags: ["burj khalifa", "dubai", "uae"] },
+            { name: "Eiffel Tower", subtitle: "Champ de Mars, Paris, France", lat: 48.8584, lon: 2.2945, tags: ["eiffel tower", "paris", "france"] },
+            { name: "London Eye", subtitle: "Riverside Building, County Hall, London, UK", lat: 51.5033, lon: -0.1195, tags: ["london eye", "london", "uk"] }
+        ];
+
+        let searchDebounceTimer = null;
+        let activeSuggestionIndex = -1;
+        let currentSuggestions = [];
+
+        function handleSearchInput(val) {
+            const query = (val || '').trim().toLowerCase();
+            const dropdown = document.getElementById('navSuggestionsDropdown');
+            if (!query || query.length < 1) {
+                hideSuggestions();
+                return;
+            }
+
+            // 1. Instant local match from KNOWN_LANDMARKS (0ms response)
+            const localMatches = KNOWN_LANDMARKS.filter(item => {
+                const inName = item.name.toLowerCase().includes(query);
+                const inSub = item.subtitle.toLowerCase().includes(query);
+                const inTags = item.tags && item.tags.some(t => t.includes(query));
+                return inName || inSub || inTags;
+            }).slice(0, 5);
+
+            renderSuggestions(localMatches, query);
+
+            // 2. Debounced online Nominatim geocoder query (280ms)
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const onlineMatches = data.map(d => ({
+                            name: d.display_name.split(',')[0].trim(),
+                            subtitle: d.display_name.split(',').slice(1, 4).join(',').trim(),
+                            lat: parseFloat(d.lat),
+                            lon: parseFloat(d.lon),
+                            tags: []
+                        }));
+
+                        // Combine unique results
+                        const combined = [...localMatches];
+                        for (const om of onlineMatches) {
+                            if (!combined.some(c => Math.abs(c.lat - om.lat) < 0.005 && Math.abs(c.lon - om.lon) < 0.005)) {
+                                combined.push(om);
+                            }
+                            if (combined.length >= 6) break;
+                        }
+                        renderSuggestions(combined, query);
+                    }
+                })
+                .catch(() => {
+                    // Retain local matches if offline
+                });
+            }, 280);
+        }
+
+        function renderSuggestions(suggestions, query) {
+            const dropdown = document.getElementById('navSuggestionsDropdown');
+            if (!dropdown) return;
+
+            if (!suggestions || suggestions.length === 0) {
+                dropdown.innerHTML = `<div class="suggestion-item" style="cursor: default; color: #6d8ba6; font-size: 0.72rem; justify-content: center;">No matching locations found</div>`;
+                dropdown.style.display = 'block';
+                currentSuggestions = [];
+                activeSuggestionIndex = -1;
+                return;
+            }
+
+            currentSuggestions = suggestions;
+            activeSuggestionIndex = -1;
+
+            let html = '';
+            suggestions.forEach((item, idx) => {
+                html += `
+                    <div class="suggestion-item" id="sugItem-${idx}" onclick="selectSuggestion(${idx})">
+                        <span class="suggestion-icon">📍</span>
+                        <div class="suggestion-text-group">
+                            <span class="suggestion-title">${escapeHtml(item.name)}</span>
+                            <span class="suggestion-subtitle">${escapeHtml(item.subtitle)}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            dropdown.innerHTML = html;
+            dropdown.style.display = 'block';
+        }
+
+        function hideSuggestions() {
+            const dropdown = document.getElementById('navSuggestionsDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+            currentSuggestions = [];
+            activeSuggestionIndex = -1;
+        }
+
+        function selectSuggestion(idx) {
+            if (!currentSuggestions[idx]) return;
+            const item = currentSuggestions[idx];
+            document.getElementById('destSearchInput').value = item.name;
+            hideSuggestions();
+            addTerminalLog('NAV-GEOCODER', `Selected destination: ${item.name}`);
+            calculateRouteTo(item.lat, item.lon, item.name);
+        }
+
+        function handleSearchKey(e) {
+            const dropdown = document.getElementById('navSuggestionsDropdown');
+            const isOpen = dropdown && dropdown.style.display === 'block';
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (!isOpen || currentSuggestions.length === 0) return;
+                activeSuggestionIndex = (activeSuggestionIndex + 1) % currentSuggestions.length;
+                updateActiveSuggestionVisual();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (!isOpen || currentSuggestions.length === 0) return;
+                activeSuggestionIndex = (activeSuggestionIndex - 1 + currentSuggestions.length) % currentSuggestions.length;
+                updateActiveSuggestionVisual();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (isOpen && activeSuggestionIndex >= 0 && currentSuggestions[activeSuggestionIndex]) {
+                    selectSuggestion(activeSuggestionIndex);
+                } else {
+                    hideSuggestions();
+                    searchAndRoute();
+                }
+            } else if (e.key === 'Escape') {
+                hideSuggestions();
+            }
+        }
+
+        function updateActiveSuggestionVisual() {
+            currentSuggestions.forEach((_, idx) => {
+                const el = document.getElementById(`sugItem-${idx}`);
+                if (el) {
+                    if (idx === activeSuggestionIndex) {
+                        el.classList.add('active');
+                        el.scrollIntoView({ block: 'nearest' });
+                    } else {
+                        el.classList.remove('active');
+                    }
+                }
+            });
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, s => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[s]));
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.nav-search-wrapper')) {
+                hideSuggestions();
+            }
+        });
+
+        function searchAndRoute() {
+            hideSuggestions();
+            const query = document.getElementById('destSearchInput').value.trim();
+            if (!query) return;
+
+            addTerminalLog('NAV-GEOCODER', `Geocoding target: "${query}"...`);
+
+            // Check KNOWN_LANDMARKS first for instant match
+            const exactLocal = KNOWN_LANDMARKS.find(k => k.name.toLowerCase() === query.toLowerCase() || k.tags.some(t => t === query.toLowerCase()));
+            if (exactLocal) {
+                calculateRouteTo(exactLocal.lat, exactLocal.lon, exactLocal.name);
+                return;
+            }
+
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    const destLat = parseFloat(data[0].lat);
+                    const destLon = parseFloat(data[0].lon);
+                    const displayName = data[0].display_name.split(',').slice(0, 2).join(',');
+                    calculateRouteTo(destLat, destLon, displayName);
+                } else {
+                    fallbackRoute(query);
+                }
+            })
+            .catch(() => fallbackRoute(query));
+        }
+
+        function fallbackRoute(query) {
+            const q = query.toLowerCase();
+            const matched = KNOWN_LANDMARKS.find(k => k.name.toLowerCase().includes(q) || k.subtitle.toLowerCase().includes(q) || k.tags.some(t => q.includes(t)));
+            if (matched) {
+                calculateRouteTo(matched.lat, matched.lon, matched.name);
+            } else {
+                const [lat, lon, name] = [18.9220, 72.8347, 'Gateway of India, Mumbai'];
+                calculateRouteTo(lat, lon, name);
+            }
+        }
+
+        function calculateRouteTo(destLat, destLon, name) {
+            document.getElementById('routeDestLabel').textContent = name;
+
+            const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentVehicleLat},${currentVehicleLon}&destination=${destLat},${destLon}&travelmode=driving`;
+            const extBtn = document.getElementById('gmapsExternalLink');
+            if (extBtn) extBtn.href = gmapsUrl;
+
+            if (destMarker && navMap) navMap.removeLayer(destMarker);
+            const destIcon = L.divIcon({
+                className: 'dest-pin',
+                html: `<div style="color:#ff2244; font-size:22px; filter:drop-shadow(0 0 10px #ff2244); transform: translate(-8px, -20px);">📍</div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 22]
+            });
+            if (navMap) {
+                destMarker = L.marker([destLat, destLon], { icon: destIcon }).addTo(navMap);
+                destMarker.bindPopup(`<b>${name}</b><br><a href="${gmapsUrl}" target="_blank" style="color:#00f3ff;">Open in Google Maps</a>`).openPopup();
+            }
+
+            // OSRM Routing
+            fetch(`https://router.project-osrm.org/route/v1/driving/${currentVehicleLon},${currentVehicleLat};${destLon},${destLat}?overview=full&geometries=geojson`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    const distKm = (route.distance / 1000).toFixed(1);
+                    const durationMin = Math.round(route.duration / 60);
+
+                    document.getElementById('routeDistVal').textContent = `${distKm} km`;
+                    document.getElementById('routeEtaVal').textContent = durationMin > 60 ? `${Math.floor(durationMin/60)}h ${durationMin%60}m` : `${durationMin} mins`;
+
+                    if (routePolyline && navMap) navMap.removeLayer(routePolyline);
+                    if (navMap) {
+                        routePolyline = L.geoJSON(route.geometry, {
+                            style: { color: '#00f3ff', weight: 5, opacity: 0.9 }
+                        }).addTo(navMap);
+                        navMap.fitBounds(routePolyline.getBounds(), { padding: [40, 40] });
+                    }
+                    addTerminalLog('NAV-ROUTE', `Route calculated: ${distKm} km, ETA: ${durationMin} mins.`);
+                } else {
+                    drawDirectRoute(destLat, destLon, name);
+                }
+            })
+            .catch(() => drawDirectRoute(destLat, destLon, name));
+        }
+
+        function drawDirectRoute(destLat, destLon, name) {
+            const dLat = (destLat - currentVehicleLat) * 111.0;
+            const dLon = (destLon - currentVehicleLon) * 111.0 * Math.cos(currentVehicleLat * Math.PI / 180.0);
+            const distKm = Math.max(1.0, Math.sqrt(dLat * dLat + dLon * dLon)).toFixed(1);
+            const etaMins = Math.round((distKm / 65.0) * 60);
+
+            document.getElementById('routeDistVal').textContent = `${distKm} km`;
+            document.getElementById('routeEtaVal').textContent = `${etaMins} mins`;
+
+            if (routePolyline && navMap) navMap.removeLayer(routePolyline);
+            if (navMap) {
+                routePolyline = L.polyline([[currentVehicleLat, currentVehicleLon], [destLat, destLon]], {
+                    color: '#00f3ff',
+                    weight: 4,
+                    dashArray: '8, 8',
+                    opacity: 0.85
+                }).addTo(navMap);
+                navMap.fitBounds(routePolyline.getBounds(), { padding: [40, 40] });
+            }
+        }
+
+        function recenterVehicle() {
+            if (navMap) {
+                navMap.setView([currentVehicleLat, currentVehicleLon], 15, { animate: true });
+                addTerminalLog('NAV-GPS', 'Map centered on vehicle GPS coordinates.');
+            }
+        }
+
+        // ------------------ HARDWARE GPS WATCHDOG ------------------
+        function initRealtimeGPS() {
+            if (!('geolocation' in navigator)) {
+                addTerminalLog('GPS-ENGINE', 'Navigator Geolocation API not detected; using telemetry sync.');
+                return;
+            }
+
+            addTerminalLog('GPS-ENGINE', 'Hardware GPS Watchdog Active. Acquiring satellite fix...');
+
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const coords = position.coords;
+                    currentVehicleLat = coords.latitude;
+                    currentVehicleLon = coords.longitude;
+                    const alt = coords.altitude || 560;
+                    const heading = coords.heading || 0;
+                    currentVehicleHeading = heading;
+
+                    let liveSpeedKmh = null;
+                    if (coords.speed !== null && !isNaN(coords.speed) && coords.speed >= 0) {
+                        liveSpeedKmh = Math.round(coords.speed * 3.6);
+                        currentVehicleSpeed = liveSpeedKmh;
+                    }
+
+                    // Transmit to edge server
+                    fetch('/api/gps_update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            lat: currentVehicleLat,
+                            lon: currentVehicleLon,
+                            altitude: alt,
+                            speed: liveSpeedKmh,
+                            heading: heading
+                        })
+                    }).catch(() => {});
+
+                    // Update Map Marker
+                    if (vehicleMarker && navMap) {
+                        vehicleMarker.setLatLng([currentVehicleLat, currentVehicleLon]);
+                        const svg = document.getElementById('carSvgMarker');
+                        if (svg) svg.style.transform = `rotate(${heading}deg)`;
+                    }
+
+                    const pill = document.getElementById('gpsStatusPill');
+                    if (pill) {
+                        pill.className = 'status-badge badge-green';
+                        pill.textContent = liveSpeedKmh !== null ? `GPS: ${liveSpeedKmh} KM/H` : 'GPS LOCKED';
+                    }
+                },
+                (err) => {
+                    console.log("GPS info:", err.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 1000 }
+            );
+        }
+
+        // ------------------ TERMINAL LOGGING ------------------
+        function addTerminalLog(src, msg, type = 'normal') {
+            const box = document.getElementById('terminalBox');
+            if (!box) return;
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            const div = document.createElement('div');
+            div.className = 'term-line';
+
+            let msgClass = 'term-msg';
+            if (type === 'v2v') msgClass = 'term-alert';
+            else if (type === 'crit') msgClass = 'term-crit';
+
+            div.innerHTML = `<span class="term-time">[${timeStr}]</span> <span class="term-src">[${src}]</span> <span class="${msgClass}">${msg}</span>`;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function openMobileModal() {
+            document.getElementById('mobileModal').style.display = 'flex';
+        }
+        function closeMobileModal(e) {
+            document.getElementById('mobileModal').style.display = 'none';
+        }
+
+        // ------------------ IN-DEVICE BLACKBOX DVR RECORDING (NO SD CARD) ------------------
+        let dvrRecorder = null;
+        let dvrChunks = [];
+        let dvrBlobUrl = null;
+        let isDvrRecording = false;
+
+        function toggleRecording() {
+            const recBtn = document.getElementById('recBtn');
+            const downBtn = document.getElementById('downloadBtn');
+
+            if (!isDvrRecording) {
+                try {
+                    const videoImg = document.getElementById('videoStream');
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 640;
+                    canvas.height = 360;
+                    const ctx = canvas.getContext('2d');
+
+                    const interval = setInterval(() => {
+                        if (!isDvrRecording) {
+                            clearInterval(interval);
+                            return;
+                        }
+                        try {
+                            ctx.drawImage(videoImg, 0, 0, 640, 360);
+                        } catch (e) {}
+                    }, 33);
+
+                    const stream = canvas.captureStream(30);
+                    dvrChunks = [];
+                    dvrRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp8' });
+                    dvrRecorder.ondataavailable = e => { if (e.data.size > 0) dvrChunks.push(e.data); };
+                    dvrRecorder.onstop = () => {
+                        const blob = new Blob(dvrChunks, { type: 'video/webm' });
+                        dvrBlobUrl = URL.createObjectURL(blob);
+                        downBtn.style.display = 'inline-block';
+                        addTerminalLog('DVR-RECORDER', 'Footage compiled in RAM. Click DOWNLOAD to save to device storage.');
+                    };
+                    dvrRecorder.start(1000);
+                    isDvrRecording = true;
+                    recBtn.textContent = '⏹️ STOP REC';
+                    recBtn.classList.add('recording-pulse');
+                    addTerminalLog('DVR-RECORDER', 'RECORDING ACTIVE // STORING TO IN-DEVICE BUFFER (NO SD CARD REQUIRED)');
+                } catch (err) {
+                    addTerminalLog('DVR-RECORDER', 'DVR Error: ' + err.message, 'crit');
+                }
+            } else {
+                isDvrRecording = false;
+                if (dvrRecorder && dvrRecorder.state !== 'inactive') {
+                    dvrRecorder.stop();
+                }
+                recBtn.textContent = '🔴 REC DVR (NO SD CARD)';
+                recBtn.classList.remove('recording-pulse');
+            }
+        }
+
+        function downloadRecording() {
+            if (!dvrBlobUrl) return;
+            const a = document.createElement('a');
+            a.href = dvrBlobUrl;
+            a.download = `ClearDrive_Blackbox_${Date.now()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            addTerminalLog('DVR-RECORDER', 'Blackbox video file downloaded to device storage.');
+        }
+
+        // ------------------ 10 HZ LIVE TELEMETRY POLLING ------------------
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/telemetry');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // Engine FPS & Latency
+                document.getElementById('t-fps').textContent = `${data.fps} FPS`;
+                const latElem = document.getElementById('t-latency');
+                latElem.textContent = `${data.latency_ms} ms LATENCY`;
+                latElem.className = (data.latency_ms > 45) ? 'tele-sub val-warn' : 'tele-sub val-good';
+
+                // Speedometer & Over-speed
+                const spdElem = document.getElementById('t-speed');
+                spdElem.textContent = `${data.speed_kmh} km/h`;
+                document.getElementById('t-limit').textContent = `LIMIT: ${data.speed_limit} km/h`;
+
+                const overspeedBanner = document.getElementById('overspeedBanner');
+                if (data.overspeed) {
+                    spdElem.className = 'tele-value val-danger';
+                    overspeedBanner.style.display = 'flex';
+                    document.getElementById('overspeedText').textContent = `OVER-SPEED WARNING: ${data.speed_kmh} km/h EXCEEDS SAFE LIMIT (${data.speed_limit} km/h)`;
+                    if (!lastOverspeedState) {
+                        playChime();
+                        lastOverspeedState = true;
+                    }
+                } else {
+                    spdElem.className = 'tele-value val-good';
+                    overspeedBanner.style.display = 'none';
+                    lastOverspeedState = false;
+                }
+
+                // Targets & Closest Distance
+                const closestElem = document.getElementById('t-closest');
+                closestElem.textContent = data.closest_vehicle || '--';
+                if (data.closest_vehicle && data.closest_vehicle !== '--') {
+                    const numD = parseFloat(data.closest_vehicle);
+                    if (numD < 8.0) closestElem.className = 'tele-value val-danger';
+                    else if (numD < 18.0) closestElem.className = 'tele-value val-warn';
+                    else closestElem.className = 'tele-value val-good';
+                } else {
+                    closestElem.className = 'tele-value';
+                }
+
+                document.getElementById('t-ttc').textContent = `TTC: ${data.ttc > 0 ? data.ttc + 's' : '--'}`;
+                document.getElementById('t-vehicles').textContent = data.vehicle_count || 0;
+                document.getElementById('t-potholes').textContent = data.pothole_count || 0;
+
+                // GPS Road Node Telemetry Card
+                const gpsElem = document.getElementById('t-gps');
+                if (gpsElem && data.gps_lat && data.gps_lon) {
+                    gpsElem.textContent = `${data.gps_lat}° N, ${data.gps_lon}° E`;
+                }
+
+                // Climate & Traction Badges
+                const climateBadge = document.getElementById('climateBadge');
+                climateBadge.textContent = `CLIMATE: ${data.climate_profile || 'ADAPTIVE AUTO'}`;
+
+                const tractionBadge = document.getElementById('tractionBadge');
+                if (data.traction_hazard) {
+                    tractionBadge.className = 'status-badge badge-purple';
+                    tractionBadge.textContent = '⚠️ HYDRO-GRIP: BLACK ICE';
+                } else {
+                    tractionBadge.className = 'status-badge badge-cyan';
+                    tractionBadge.textContent = 'HYDRO-GRIP: OPTIMAL';
+                }
+
+                // Autobrake AEB Banner
+                const banner = document.getElementById('autobrakeBanner');
+                if (data.brake_alert) {
+                    banner.style.display = 'flex';
+                    document.getElementById('bannerTtc').textContent = `TTC: ${data.ttc}s`;
+                    playSiren();
+                } else {
+                    banner.style.display = 'none';
+                    stopSiren();
+                }
+
+                // V2V Terminal Events
+                if (data.v2v_active && data.v2v_event !== lastV2VEventStr) {
+                    lastV2VEventStr = data.v2v_event;
+                    addTerminalLog('V2V-DSRC', data.v2v_event, 'v2v');
+                } else if (!data.v2v_active) {
+                    lastV2VEventStr = '';
+                }
+
+                // Synchronize Feature Buttons Glow with Server State
+                if (data.features) {
+                    activeFeatures = data.features;
+                    updateFeatureButtons(data.features);
+                }
+
+                // Perception Chips
+                const chipsContainer = document.getElementById('chipsContainer');
+                chipsContainer.innerHTML = '';
+                (data.enhancements || []).forEach(enh => {
+                    const chip = document.createElement('span');
+                    chip.className = 'chip';
+                    chip.innerHTML = `<span>⚡</span> ${enh}`;
+                    chipsContainer.appendChild(chip);
+                });
+
+            } catch (err) {}
+        }, 100);
+
+        // Initialize Map & GPS on Page Load
+        window.addEventListener('load', () => {
+            initNavMap();
+            initRealtimeGPS();
+        });
+    </script>
+</body>
+</html>

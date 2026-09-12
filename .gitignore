@@ -1,0 +1,38 @@
+﻿# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Large Screen Recordings (Files > 100MB exceed GitHub file limit)
+Screen Recording *.mp4
+*.mov
+*.mkv
+
+# Duplicate video copies (keep canonical *_dashcam.mp4)
+fog.mp4
+night.mp4
+rain.mp4
+
+# Local packaging duplicate folder
+ClearDrive_AI/
+
+# Temporary test & debug images
+*.jpg
+*.jpeg
+*.png
+
+# Local self-signed development SSL certificates
+key.pem
+cert.pem
+
+# Operating System & IDE metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
