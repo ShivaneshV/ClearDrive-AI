@@ -30,6 +30,8 @@ class VehicleTracker:
             fov_deg: Horizontal Field of View of automotive camera lens.
         """
         self.model = YOLO(model_name)
+        if hasattr(self.model, 'to'):
+            self.model.to('cpu')
         # Target classes: 2 (car), 3 (motorcycle), 5 (bus), 7 (truck)
         self.target_classes = [2, 3, 5, 7]
         self.cam_height = cam_height
@@ -87,7 +89,8 @@ class VehicleTracker:
             classes=self.target_classes, 
             conf=conf_thresh, 
             verbose=False,
-            imgsz=480
+            imgsz=480,
+            device='cpu'
         )[0]
 
         vehicles = []

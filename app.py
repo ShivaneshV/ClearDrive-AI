@@ -18,6 +18,7 @@ import cv2
 import time
 import socket
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import threading
 import numpy as np
 from flask import Flask, Response, render_template, jsonify, request, send_from_directory

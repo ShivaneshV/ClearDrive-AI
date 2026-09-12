@@ -28,7 +28,16 @@ except ImportError:
 class OmniVisionEngine:
     def __init__(self, yolo_model='yolov8n.pt'):
         print("[OmniVisionEngine] Initializing Next-Gen Omni-Vision Engine...")
-        self.model = YOLO(yolo_model) if YOLO else None
+        if YOLO:
+            try:
+                self.model = YOLO(yolo_model)
+                if hasattr(self.model, 'to'):
+                    self.model.to('cpu')
+            except Exception as e:
+                print(f"[OmniVisionEngine] YOLO init notice: {e}")
+                self.model = None
+        else:
+            self.model = None
 
         # Classes: Pedestrian (0), Cyclist (1), Car (2), Motorcycle (3), Bus (5), Truck (7)
         self.target_classes = [0, 1, 2, 3, 5, 7]
@@ -466,7 +475,8 @@ class OmniVisionEngine:
                 classes=self.target_classes,
                 conf=0.25,
                 verbose=False,
-                imgsz=320
+                imgsz=320,
+                device='cpu'
             )[0]
 
             targets = []
