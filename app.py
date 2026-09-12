@@ -24,6 +24,23 @@ from flask import Flask, Response, render_template, jsonify, request, send_from_
 
 from engine import OmniVisionEngine
 
+# Hugging Face ZeroGPU Registration Hook
+try:
+    import spaces
+    @spaces.GPU
+    def zero_gpu_perception_hook():
+        """Registers ZeroGPU perception requirement for Hugging Face Spaces"""
+        return True
+    
+    if os.environ.get('SPACE_ID'):
+        try:
+            zero_gpu_perception_hook()
+        except Exception as _e:
+            pass
+except Exception:
+    def zero_gpu_perception_hook():
+        return True
+
 app = Flask(__name__)
 engine = OmniVisionEngine(yolo_model='yolov8n.pt')
 
