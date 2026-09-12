@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>CLEAR-DRIVE AI | Predictive V2X Omni-Vision Cockpit</title>
+    <!-- PWA Manifest & App Standalone Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#050811">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ClearDrive AI">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,4 92,26 92,72 50,96 8,72 8,26' fill='%23060b14' stroke='%2300f3ff' stroke-width='6'/><circle cx='50' cy='50' r='14' fill='%23ff00ea'/><circle cx='50' cy='50' r='5' fill='%23ffffff'/></svg>">
     <!-- Leaflet & Google Map Engine CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -847,6 +855,9 @@
             <div id="climateBadge" class="status-badge badge-cyan">CLIMATE: ADAPTIVE AUTO</div>
             <div id="tractionBadge" class="status-badge badge-cyan">HYDRO-GRIP: OPTIMAL</div>
             <div id="aebBadge" class="status-badge badge-green">AEB: ARMED</div>
+            <button id="pwaInstallBtn" class="status-badge badge-cyan" style="cursor: pointer; background: rgba(0, 243, 255, 0.22); border: 1px solid var(--cyan-neon); font-weight: bold;" onclick="triggerPWAInstall()" title="Install ClearDrive AI as a native app on this device">
+                <span>📲</span> INSTALL APP
+            </button>
         </div>
     </header>
 
@@ -1924,6 +1935,46 @@
 
             } catch (err) {}
         }, 100);
+
+        // ------------------ PWA SERVICE WORKER & NATIVE APP INSTALL ------------------
+        let deferredPWAInstallPrompt = null;
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPWAInstallPrompt = e;
+            const btn = document.getElementById('pwaInstallBtn');
+            if (btn) {
+                btn.style.display = 'inline-flex';
+                btn.style.animation = 'pulseTraction 1.5s infinite alternate';
+            }
+        });
+
+        function triggerPWAInstall() {
+            if (deferredPWAInstallPrompt) {
+                deferredPWAInstallPrompt.prompt();
+                deferredPWAInstallPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        addTerminalLog('PWA-INSTALL', 'ClearDrive AI installed as native dashboard app.');
+                    }
+                    deferredPWAInstallPrompt = null;
+                    const btn = document.getElementById('pwaInstallBtn');
+                    if (btn) btn.style.display = 'none';
+                });
+            } else {
+                // Fallback instructions for mobile and desktop
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                if (isIOS) {
+                    alert("To install ClearDrive AI on your iPhone / iPad:\n\n1. Tap the Share icon (box with up arrow) at the bottom.\n2. Scroll down and tap 'Add to Home Screen'.");
+                } else {
+                    alert("To install ClearDrive AI as an app:\n\n1. In Chrome / Edge: Click the 'Install' icon (⊕ or computer screen) on the right side of the address bar, OR tap the 3 dots menu -> 'Install app' / 'Add to Home Screen'.\n2. It will create a native borderless desktop/dashboard app icon on your screen!");
+                }
+            }
+        }
 
         // Initialize Map & GPS on Page Load
         window.addEventListener('load', () => {

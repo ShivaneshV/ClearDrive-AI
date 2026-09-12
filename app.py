@@ -20,7 +20,7 @@ import socket
 import os
 import threading
 import numpy as np
-from flask import Flask, Response, render_template, jsonify, request
+from flask import Flask, Response, render_template, jsonify, request, send_from_directory
 
 from engine import OmniVisionEngine
 
@@ -436,6 +436,18 @@ def generate_frames():
 def index():
     """Renders the cockpit UI."""
     return render_template('index.html', local_ip=get_local_ip())
+
+
+@app.route('/manifest.json')
+def manifest():
+    """Serves PWA Web App Manifest."""
+    return send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
+
+
+@app.route('/sw.js')
+def service_worker():
+    """Serves PWA Service Worker."""
+    return send_from_directory('static', 'sw.js', mimetype='application/javascript')
 
 
 @app.route('/camera')
