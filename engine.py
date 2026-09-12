@@ -30,6 +30,11 @@ class OmniVisionEngine:
         print("[OmniVisionEngine] Initializing Next-Gen Omni-Vision Engine...")
         if YOLO:
             try:
+                # If Git LFS pointer text file was cloned, remove it so YOLO auto-downloads real weights
+                if os.path.exists(yolo_model) and os.path.getsize(yolo_model) < 1024:
+                    print(f"[OmniVisionEngine] Git LFS pointer detected for {yolo_model}, redownloading clean weights...")
+                    try: os.remove(yolo_model)
+                    except Exception: pass
                 self.model = YOLO(yolo_model)
                 if hasattr(self.model, 'to'):
                     self.model.to('cpu')
