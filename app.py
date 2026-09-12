@@ -200,18 +200,20 @@ def get_local_ip():
 
 
 def resolve_video_path(filename):
-    """Resolves playlist video path with automatic fallback."""
+    """Resolves playlist video path with automatic fallback (verifies size > 1024 bytes to ignore LFS pointers)."""
     if str(filename).isdigit():
         return int(filename)
-    if os.path.exists(filename):
+    if os.path.exists(filename) and os.path.getsize(filename) > 1024:
         return filename
     fallback = FALLBACK_MAP.get(filename)
-    if fallback and os.path.exists(fallback):
+    if fallback and os.path.exists(fallback) and os.path.getsize(fallback) > 1024:
         return fallback
     alt = os.path.join("ClearDrive_AI", filename)
-    if os.path.exists(alt):
+    if os.path.exists(alt) and os.path.getsize(alt) > 1024:
         return alt
-    return filename
+    if os.path.exists(filename):
+        return filename
+    return PLAYLIST[0]
 
 
 def make_device_standby_frame(device_type, host_ip='127.0.0.1', port=5000):
