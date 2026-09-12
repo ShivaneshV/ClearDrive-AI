@@ -748,10 +748,140 @@
             background: rgba(0, 243, 255, 0.4);
             animation: markerPulse 1.6s infinite ease-out;
         }
-        @keyframes markerPulse {
-            0% { transform: scale(0.4); opacity: 1; }
-            100% { transform: scale(1.8); opacity: 0; }
+        /* ------------------ DEDICATED HARDWARE DASHCAM SELECTOR BAR ------------------ */
+        .dashcam-selector-panel {
+            background: linear-gradient(135deg, rgba(9, 14, 26, 0.96), rgba(16, 28, 50, 0.92));
+            border: 2px solid #1c3859;
+            border-radius: 8px;
+            padding: 12px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
         }
+
+        .dashcam-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            border-bottom: 1px solid rgba(0, 243, 255, 0.15);
+            padding-bottom: 8px;
+        }
+
+        .dashcam-title-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            font-weight: 900;
+            letter-spacing: 1.5px;
+            color: #ffffff;
+        }
+
+        .pulse-rec-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--red-neon);
+            box-shadow: 0 0 10px var(--red-neon);
+            animation: pulseDanger 1.2s infinite;
+        }
+
+        .dashcam-title-sub {
+            font-family: var(--font-mono);
+            font-size: 0.70rem;
+            letter-spacing: 1px;
+            color: #6a8ea8;
+        }
+
+        .dashcam-btn-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        @media (max-width: 820px) {
+            .dashcam-btn-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .dashcam-feed-btn {
+            background: rgba(14, 23, 38, 0.88);
+            border: 2px solid #1e334a;
+            border-radius: 8px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            cursor: pointer;
+            transition: all 0.22s ease;
+            position: relative;
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .dashcam-feed-btn:hover {
+            border-color: var(--cyan-neon);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 243, 255, 0.28);
+            background: rgba(18, 34, 58, 0.95);
+        }
+
+        .dashcam-feed-btn:active {
+            transform: translateY(0);
+        }
+
+        .dashcam-feed-btn.active-dashcam {
+            border-color: #00ff66 !important;
+            background: linear-gradient(135deg, rgba(0, 255, 102, 0.18), rgba(9, 38, 22, 0.92)) !important;
+            box-shadow: 0 0 24px rgba(0, 255, 102, 0.45) !important;
+        }
+
+        .dashcam-btn-icon {
+            font-size: 1.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dashcam-btn-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .dashcam-name {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: #ffffff;
+            font-family: var(--font-sans);
+        }
+
+        .dashcam-sub {
+            font-size: 0.68rem;
+            font-family: var(--font-mono);
+            color: #7b9bb5;
+            margin-top: 2px;
+        }
+
+        .dashcam-pill {
+            font-size: 0.62rem;
+            font-family: var(--font-mono);
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.8px;
+            white-space: nowrap;
+        }
+
+        .pill-car { background: rgba(255, 170, 0, 0.15); border: 1px solid var(--amber-neon); color: var(--amber-neon); }
+        .pill-phone { background: rgba(0, 243, 255, 0.15); border: 1px solid var(--cyan-neon); color: var(--cyan-neon); }
+        .pill-laptop { background: rgba(0, 255, 102, 0.15); border: 1px solid var(--green-neon); color: var(--green-neon); }
     </style>
 </head>
 <body>
@@ -968,21 +1098,66 @@
             </div>
         </div>
 
+        <!-- DEDICATED HARDWARE DASHCAM SELECTOR (CAR / MOBILE / LAPTOP) -->
+        <div class="dashcam-selector-panel">
+            <div class="dashcam-header-row">
+                <div class="dashcam-title-badge">
+                    <span class="pulse-rec-dot"></span>
+                    <span>HARDWARE DASHCAM FEED SELECTOR</span>
+                </div>
+                <div class="dashcam-title-sub">
+                    CLICK TO ACTIVATE DEVICE CAMERA AUTOMATICALLY  •  NEVER FALLS BACK TO DEMO FOOTAGE
+                </div>
+            </div>
+            <div class="dashcam-btn-grid">
+                <button class="dashcam-feed-btn" id="btn-dashcam-car" onclick="selectDevice('car')">
+                    <div class="dashcam-btn-icon">🚗</div>
+                    <div class="dashcam-btn-info">
+                        <span class="dashcam-name">Car Dash Cam</span>
+                        <span class="dashcam-sub">Hardware USB Dashcam / UVC</span>
+                    </div>
+                    <span class="dashcam-pill pill-car">USB PORT 1</span>
+                </button>
+
+                <button class="dashcam-feed-btn" id="btn-dashcam-phone" onclick="selectDevice('phone')">
+                    <div class="dashcam-btn-icon">📱</div>
+                    <div class="dashcam-btn-info">
+                        <span class="dashcam-name">Mobile Dash Cam</span>
+                        <span class="dashcam-sub">Wireless 720p HD Windshield Node</span>
+                    </div>
+                    <span class="dashcam-pill pill-phone">WIFI / HTTPS</span>
+                </button>
+
+                <button class="dashcam-feed-btn" id="btn-dashcam-laptop" onclick="selectDevice('laptop')">
+                    <div class="dashcam-btn-icon">💻</div>
+                    <div class="dashcam-btn-info">
+                        <span class="dashcam-name">Laptop Dash Cam</span>
+                        <span class="dashcam-sub">Auto-Start Physical Laptop Webcam</span>
+                    </div>
+                    <span class="dashcam-pill pill-laptop">AUTO-CAM</span>
+                </button>
+            </div>
+        </div>
+
         <!-- EXACT BUTTON MATRIX FROM USER'S SCREENSHOT (media_1789220343574.png) -->
         <div class="button-matrix-card">
             <!-- Row 1: Dropdown Clip Selector & Optics -->
             <div class="matrix-row">
                 <select id="videoSelect" class="hud-select" onchange="changeSource()">
-                    <option value="auto">🔄 Autonomous Multi-Hazard Playlist</option>
-                    <option value="traffic_dashcam.mp4">🚗 Demo 8: Highway Traffic & Distance (traffic_dashcam.mp4)</option>
-                    <option value="foggy_dashcam.mp4">🌫️ Demo 1: Dense Himalayan Fog (foggy_dashcam.mp4)</option>
-                    <option value="indian_rain.mp4">🌧️ Demo 2: Heavy Monsoon Rain (indian_rain.mp4)</option>
-                    <option value="night_dashcam.mp4">🌙 Demo 3: Dark Night Highway (night_dashcam.mp4)</option>
-                    <option value="glare_dashcam.mp4">☀️ Demo 4: High-Beam Glare & Snow (glare_dashcam.mp4)</option>
-                    <option value="pothole_dashcam.mp4">⚠️ Demo 6: Urban Road Potholes (pothole_dashcam.mp4)</option>
-                    <option value="phone">📱 Live Mobile Dashcam (Wireless Node)</option>
-                    <option value="0">📷 Laptop Webcam (Port 0)</option>
-                    <option value="1">📱 USB Dashcam (Port 1)</option>
+                    <optgroup label="🔴 LIVE VEHICLE DASHCAMS (AUTO CAMERA)">
+                        <option value="car">🚗 Car Dash Cam (Hardware USB)</option>
+                        <option value="phone">📱 Mobile Dash Cam (Wireless Phone Node)</option>
+                        <option value="laptop">💻 Laptop Dash Cam (Built-in Webcam)</option>
+                    </optgroup>
+                    <optgroup label="🎬 BENCHMARK RECORDED SCENARIOS">
+                        <option value="auto">🔄 Autonomous Multi-Hazard Playlist</option>
+                        <option value="traffic_dashcam.mp4">🚗 Demo 8: Highway Traffic & Distance (traffic_dashcam.mp4)</option>
+                        <option value="foggy_dashcam.mp4">🌫️ Demo 1: Dense Himalayan Fog (foggy_dashcam.mp4)</option>
+                        <option value="indian_rain.mp4">🌧️ Demo 2: Heavy Monsoon Rain (indian_rain.mp4)</option>
+                        <option value="night_dashcam.mp4">🌙 Demo 3: Dark Night Highway (night_dashcam.mp4)</option>
+                        <option value="glare_dashcam.mp4">☀️ Demo 4: High-Beam Glare & Snow (glare_dashcam.mp4)</option>
+                        <option value="pothole_dashcam.mp4">⚠️ Demo 6: Urban Road Potholes (pothole_dashcam.mp4)</option>
+                    </optgroup>
                 </select>
 
                 <button class="hud-btn btn-cyan" id="btn-fog" onclick="toggleFeature('fog')">
@@ -1218,8 +1393,181 @@
             }
         }
 
+        // ------------------ HARDWARE DASHCAM CONTROLLER & AUTO-ACTIVATION ------------------
+        let laptopWebcamStream = null;
+        let isLaptopStreaming = false;
+        let laptopVideoElem = null;
+        let laptopCanvas = null;
+        let isUploadingLaptop = false;
+
+        async function selectDevice(device) {
+            // 1. Visually activate button
+            ['car', 'phone', 'laptop'].forEach(d => {
+                const btn = document.getElementById('btn-dashcam-' + d);
+                if (btn) {
+                    if (d === device) btn.classList.add('active-dashcam');
+                    else btn.classList.remove('active-dashcam');
+                }
+            });
+
+            // 2. Synchronize dropdown
+            const vSel = document.getElementById('videoSelect');
+            if (vSel) vSel.value = device;
+
+            // 3. Hardware Camera Auto-Activation
+            if (device === 'laptop') {
+                // Instantly turn on laptop physical camera via browser getUserMedia
+                await activateLaptopWebcam();
+            } else {
+                stopLaptopWebcam();
+            }
+
+            if (device === 'phone') {
+                // Auto-prompt mobile connection modal if phone is not actively transmitting
+                fetch('/api/telemetry')
+                    .then(r => r.json())
+                    .then(t => {
+                        if (t.source !== 'phone' || !t.current_video || !t.current_video.includes('LIVE')) {
+                            openMobileModal();
+                        }
+                    })
+                    .catch(() => openMobileModal());
+            }
+
+            // 4. Update backend source settings
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: device })
+            })
+            .then(res => res.json())
+            .then(d => {
+                const labelMap = {
+                    'car': 'CAR DASH CAM (HARDWARE USB)',
+                    'phone': 'MOBILE DASH CAM (WIRELESS NODE)',
+                    'laptop': 'LAPTOP DASH CAM (BUILT-IN WEBCAM)'
+                };
+                addTerminalLog('DASHCAM-CTL', `Feed locked to: ${labelMap[device] || device.toUpperCase()}`);
+                const sImg = document.getElementById('videoStream');
+                if (sImg) sImg.src = '/video_feed?t=' + Date.now();
+            })
+            .catch(err => console.error(err));
+        }
+
+        async function activateLaptopWebcam() {
+            addTerminalLog('HARDWARE', 'Requesting physical Laptop Camera permissions...');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                addTerminalLog('HARDWARE', 'Camera requires HTTPS or localhost context.', 'crit');
+                return;
+            }
+
+            try {
+                if (!laptopVideoElem) {
+                    laptopVideoElem = document.createElement('video');
+                    laptopVideoElem.setAttribute('autoplay', '');
+                    laptopVideoElem.setAttribute('playsinline', '');
+                    laptopVideoElem.setAttribute('muted', '');
+                    laptopVideoElem.style.display = 'none';
+                    document.body.appendChild(laptopVideoElem);
+                }
+                if (!laptopCanvas) {
+                    laptopCanvas = document.createElement('canvas');
+                    laptopCanvas.width = 640;
+                    laptopCanvas.height = 360;
+                    laptopCanvas.style.display = 'none';
+                    document.body.appendChild(laptopCanvas);
+                }
+
+                // Request camera stream: turns on the physical laptop webcam light immediately!
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 360 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                });
+
+                laptopWebcamStream = stream;
+                laptopVideoElem.srcObject = stream;
+                await laptopVideoElem.play();
+                isLaptopStreaming = true;
+
+                addTerminalLog('HARDWARE', 'Laptop Camera Hardware ONLINE // Streaming to AI perception engine');
+                transmitLaptopFrames();
+            } catch (err) {
+                console.warn('Laptop camera activation notice:', err);
+                addTerminalLog('HARDWARE', `Webcam access notice: ${err.message || 'Permission denied'}`, 'crit');
+            }
+        }
+
+        function stopLaptopWebcam() {
+            isLaptopStreaming = false;
+            if (laptopWebcamStream) {
+                laptopWebcamStream.getTracks().forEach(track => {
+                    try { track.stop(); } catch (e) {}
+                });
+                laptopWebcamStream = null;
+            }
+            if (laptopVideoElem) {
+                laptopVideoElem.srcObject = null;
+            }
+        }
+
+        function transmitLaptopFrames() {
+            if (!isLaptopStreaming || !laptopVideoElem) return;
+
+            function sendNext() {
+                if (!isLaptopStreaming) return;
+                if (isUploadingLaptop || laptopVideoElem.readyState < 2) {
+                    requestAnimationFrame(sendNext);
+                    return;
+                }
+
+                const ctx = laptopCanvas.getContext('2d');
+                ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
+
+                isUploadingLaptop = true;
+                laptopCanvas.toBlob(blob => {
+                    if (!blob || !isLaptopStreaming) {
+                        isUploadingLaptop = false;
+                        requestAnimationFrame(sendNext);
+                        return;
+                    }
+
+                    fetch('/api/laptop_frame', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'image/jpeg' },
+                        body: blob
+                    })
+                    .then(res => res.json())
+                    .catch(e => {})
+                    .finally(() => {
+                        isUploadingLaptop = false;
+                        setTimeout(() => {
+                            requestAnimationFrame(sendNext);
+                        }, 30);
+                    });
+                }, 'image/jpeg', 0.75);
+            }
+
+            requestAnimationFrame(sendNext);
+        }
+
         function changeSource() {
             const val = document.getElementById('videoSelect').value;
+            if (['car', 'phone', 'laptop'].includes(val)) {
+                selectDevice(val);
+                return;
+            }
+
+            // Benchmark scenario or playlist selected
+            stopLaptopWebcam();
+            ['car', 'phone', 'laptop'].forEach(d => {
+                const btn = document.getElementById('btn-dashcam-' + d);
+                if (btn) btn.classList.remove('active-dashcam');
+            });
+
             fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1227,8 +1575,7 @@
             })
             .then(res => res.json())
             .then(d => {
-                addTerminalLog('SRC-SWITCH', `Stream source routed to: ${val.toUpperCase()}`);
-                // Refresh stream connection immediately on source change
+                addTerminalLog('SRC-SWITCH', `Benchmark scenario loaded: ${val.toUpperCase()}`);
                 const sImg = document.getElementById('videoStream');
                 if (sImg) sImg.src = '/video_feed?t=' + Date.now();
             })
@@ -1929,12 +2276,20 @@
                     updateFeatureButtons(data.features);
                 }
 
-                // Sync Source Dropdown with Active Perception Source
+                // Sync Source Dropdown and Hardware Dashcam Buttons
                 if (data.source) {
                     const videoSelectEl = document.getElementById('videoSelect');
                     if (videoSelectEl && videoSelectEl.value !== data.source) {
                         videoSelectEl.value = data.source;
                     }
+                    const activeDev = ['car', 'phone', 'laptop'].includes(data.source) ? data.source : null;
+                    ['car', 'phone', 'laptop'].forEach(d => {
+                        const b = document.getElementById('btn-dashcam-' + d);
+                        if (b) {
+                            if (d === activeDev) b.classList.add('active-dashcam');
+                            else b.classList.remove('active-dashcam');
+                        }
+                    });
                 }
 
                 // Perception Chips

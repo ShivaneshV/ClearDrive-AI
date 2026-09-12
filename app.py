@@ -147,6 +147,12 @@ v2v_cycle_index = 0
 phone_frame_buffer = None
 phone_last_seen = 0.0
 phone_frame_id = 0
+
+# Laptop Web Dashcam Buffer
+laptop_frame_buffer = None
+laptop_last_seen = 0.0
+laptop_frame_id = 0
+
 frame_seq_id = 0
 
 telemetry_data = {
@@ -208,6 +214,103 @@ def resolve_video_path(filename):
     return filename
 
 
+def make_device_standby_frame(device_type, host_ip='127.0.0.1', port=5000):
+    """Generates an authentic, high-contrast Cyber HUD standby frame with clear connection instructions.
+    CRITICAL RULE: Never falls back to benchmark demo clips when a hardware dashcam is selected."""
+    w, h = 640, 360
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    for y in range(h):
+        ratio = y / h
+        img[y, :] = [int(20 + 10 * ratio), int(14 + 6 * ratio), int(8 + 4 * ratio)]
+
+    # Subtle tech grid
+    for gx in range(0, w, 40):
+        cv2.line(img, (gx, 0), (gx, h), (38, 28, 18), 1)
+    for gy in range(0, h, 40):
+        cv2.line(img, (0, gy), (w, gy), (38, 28, 18), 1)
+
+    # Animated radar scanline
+    scan_y = int((time.time() * 90) % (h - 20)) + 10
+    cv2.line(img, (10, scan_y), (w - 10, scan_y), (255, 243, 0), 1)
+
+    if str(device_type).lower() in ['car', 'cam1', '1']:
+        border_color = (255, 160, 0)
+        title = 'CAR DASH CAM // HARDWARE USB STANDBY'
+        dev_tag = '[ PORT 1 / DIRECTSHOW USB ]'
+        status_text = 'DEVICE DISCONNECTED: NO USB DASHCAM DETECTED'
+        steps = [
+            '1. Connect your Car USB Dashcam / UVC Capture Card to USB Port.',
+            '2. Ensure camera drivers are active in Windows Device Manager.',
+            '3. ClearDrive AI will automatically lock onto the live feed.',
+            'TIP: For wireless smartphone windshield mount, select Mobile Dash Cam.'
+        ]
+    elif str(device_type).lower() in ['laptop', 'cam0', '0']:
+        border_color = (0, 255, 120)
+        title = 'LAPTOP DASH CAM // HARDWARE WEBCAM'
+        dev_tag = '[ BUILT-IN WEBCAM / WEBRTC ]'
+        status_text = 'CAMERA STANDBY: AWAITING PERMISSION OR ACTIVATION'
+        steps = [
+            '1. Click the "Laptop Dash Cam" button above to turn on camera.',
+            '2. Tap "Allow" when your browser prompts for Camera permissions.',
+            '3. Ensure your laptop webcam privacy shutter is open.',
+            'ClearDrive AI will instantly route your live webcam to the AI engine.'
+        ]
+    else:  # phone / mobile
+        border_color = (255, 243, 0)
+        title = 'MOBILE DASH CAM // WIRELESS STREAM'
+        dev_tag = '[ WIRELESS HTTPS DASHCAM NODE ]'
+        status_text = 'NO ACTIVE TRANSMISSION DETECTED FROM SMARTPHONE'
+        steps = [
+            '1. Connect your phone to same Wi-Fi / Hotspot as this computer.',
+            f'2. Open on phone: https://{host_ip}:5001/camera  (or :5000)',
+            '3. Tap "START BROADCASTING" and mount phone on windshield.',
+            'Live neural perception and collision radar engage automatically!'
+        ]
+
+    # Outer cyber reticle
+    cv2.rectangle(img, (14, 14), (w - 14, h - 14), border_color, 2)
+    c_len = 18
+    for cx, cy in [(14, 14), (w - 14, 14), (14, h - 14), (w - 14, h - 14)]:
+        dx = 1 if cx < w // 2 else -1
+        dy = 1 if cy < h // 2 else -1
+        cv2.line(img, (cx, cy), (cx + dx * c_len, cy), (255, 255, 255), 3)
+        cv2.line(img, (cx, cy), (cx, cy + dy * c_len), (255, 255, 255), 3)
+
+    # Top Title Badge
+    cv2.rectangle(img, (24, 22), (w - 24, 60), (32, 22, 14), -1)
+    cv2.rectangle(img, (24, 22), (w - 24, 60), border_color, 1)
+    cv2.putText(img, title, (36, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.56, border_color, 2, cv2.LINE_AA)
+    cv2.putText(img, dev_tag, (w - 235, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (180, 180, 180), 1, cv2.LINE_AA)
+
+    # Status Bar
+    cv2.rectangle(img, (24, 70), (w - 24, 100), (22, 16, 45), -1)
+    dot_color = (0, 70, 255) if int(time.time() * 2) % 2 == 0 else (0, 180, 255)
+    cv2.circle(img, (40, 85), 6, dot_color, -1)
+    cv2.putText(img, status_text, (56, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (220, 220, 255), 1, cv2.LINE_AA)
+
+    # Guide Header
+    cv2.putText(img, 'HOW TO CONNECT THIS DEVICE (NO FALLBACK FOOTAGE):', (30, 126),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.39, (0, 243, 255), 1, cv2.LINE_AA)
+    cv2.line(img, (30, 134), (w - 30, 134), (65, 50, 35), 1)
+
+    # Steps
+    y_step = 162
+    for s in steps:
+        is_highlight = s.startswith('TIP') or s.startswith('ClearDrive') or s.startswith('Live neural')
+        prefix = '>>' if not is_highlight else '  *'
+        col = (255, 255, 255) if not is_highlight else (0, 230, 180)
+        cv2.putText(img, f'{prefix} {s}', (34, y_step), cv2.FONT_HERSHEY_SIMPLEX, 0.38, col, 1, cv2.LINE_AA)
+        y_step += 27
+
+    # Bottom Footer
+    cv2.rectangle(img, (24, h - 54), (w - 24, h - 24), (24, 18, 14), -1)
+    cv2.rectangle(img, (24, h - 54), (w - 24, h - 24), (60, 50, 40), 1)
+    cv2.putText(img, 'STATUS: SCANNING HARDWARE BUS... | AUTO-DETECT: ACTIVE | ADAS PIPELINE: READY',
+                (36, h - 35), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 100), 1, cv2.LINE_AA)
+
+    return img
+
+
 def process_video():
     """Continuous Predictive ADAS Pipeline Loop with Zero-Freeze Watchdog."""
     global current_frame, telemetry_data, current_source, source_changed, frame_seq_id
@@ -259,9 +362,12 @@ def process_video():
             active_road = live_gps_road
 
         raw_frame = None
+        is_standby_guide = False
 
-        # Case 1: Wireless Mobile Phone Web Dashcam (/camera)
-        if src == 'phone':
+        # -------------------------------------------------------------
+        # Case 1: Mobile Dash Cam (Wireless Phone Node via /camera)
+        # -------------------------------------------------------------
+        if src in ['phone', 'mobile']:
             with lock:
                 has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 4.0)
                 if has_phone:
@@ -271,41 +377,90 @@ def process_video():
                 if cap is not None:
                     cap.release()
                     cap = None
+                display_clip = "📱 LIVE MOBILE DASH CAM"
             else:
-                # Standby: phone not yet transmitting or paused; stream demo clip so viewport stays alive
-                if cap is None or not cap.isOpened():
-                    cap = cv2.VideoCapture(resolve_video_path(PLAYLIST[0]))
-                ret, raw_frame = cap.read() if cap else (False, None)
-                if not ret or raw_frame is None:
-                    if cap: cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                if cap is not None:
+                    cap.release()
+                    cap = None
+                raw_frame = make_device_standby_frame('phone', get_local_ip())
+                is_standby_guide = True
+                display_clip = "📱 MOBILE DASH CAM // AWAITING STREAM"
 
-        # Case 2: Hardware USB Camera (e.g. index 1 or 0)
-        elif str(src).isdigit() or str(src).startswith('cam'):
-            cam_idx = int(str(src).replace('cam', ''))
-            if cap is None or not cap.isOpened() or last_opened_source != src:
-                print(f"[Clear-Drive AI] Opening Hardware DirectShow Camera {cam_idx}...")
-                cap = cv2.VideoCapture(cam_idx, cv2.CAP_DSHOW)
-                if cap.isOpened():
-                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-                last_opened_source = src
+        # -------------------------------------------------------------
+        # Case 2: Laptop Dash Cam (Browser getUserMedia or DirectShow 0)
+        # -------------------------------------------------------------
+        elif src in ['laptop', 'cam0', '0']:
+            # First priority: check if browser webcam stream is active via /api/laptop_frame
+            with lock:
+                has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 4.0)
+                if has_laptop_stream:
+                    raw_frame = laptop_frame_buffer.copy()
 
-            ret, raw_frame = cap.read() if cap is not None else (False, None)
-            if not ret or raw_frame is None:
-                # Watchdog: If USB camera does not stream within 1.5s, fall back to demo video
-                if (now - last_successful_frame_time) > 1.5:
-                    print(f"[Clear-Drive AI] Camera {cam_idx} busy or not streaming -> Falling back to playlist")
-                    with lock:
-                        current_source = 'auto'
-                        source_changed = True
-                    time.sleep(0.05)
-                    continue
-                else:
-                    time.sleep(0.02)
-                    continue
+            # Second priority: if running locally on PC, try OpenCV VideoCapture(0)
+            if raw_frame is None:
+                if cap is None or not cap.isOpened() or last_opened_source != 'laptop_cam0':
+                    try:
+                        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                        if not cap.isOpened():
+                            cap = cv2.VideoCapture(0)
+                        if cap.isOpened():
+                            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+                        last_opened_source = 'laptop_cam0'
+                    except Exception:
+                        cap = None
 
-        # Case 3: Specific Video Selected from Dropdown
+                if cap is not None and cap.isOpened():
+                    ret, test_f = cap.read()
+                    if ret and test_f is not None and test_f.size > 0:
+                        raw_frame = test_f
+
+            if raw_frame is not None:
+                display_clip = "💻 LIVE LAPTOP DASH CAM"
+            else:
+                if cap is not None:
+                    cap.release()
+                    cap = None
+                raw_frame = make_device_standby_frame('laptop', get_local_ip())
+                is_standby_guide = True
+                display_clip = "💻 LAPTOP DASH CAM // STANDBY"
+
+        # -------------------------------------------------------------
+        # Case 3: Car Dash Cam (Hardware USB Dashcam on Port 1 or DirectShow)
+        # -------------------------------------------------------------
+        elif src in ['car', 'cam1', '1']:
+            if cap is None or not cap.isOpened() or last_opened_source != 'car_cam1':
+                try:
+                    cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+                    if not cap.isOpened():
+                        cap = cv2.VideoCapture(1)
+                    if cap.isOpened():
+                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+                    last_opened_source = 'car_cam1'
+                except Exception:
+                    cap = None
+
+            if cap is not None and cap.isOpened():
+                ret, test_f = cap.read()
+                if ret and test_f is not None and test_f.size > 0:
+                    raw_frame = test_f
+
+            if raw_frame is not None:
+                display_clip = "🚗 LIVE CAR DASH CAM (USB)"
+            else:
+                if cap is not None:
+                    cap.release()
+                    cap = None
+                raw_frame = make_device_standby_frame('car', get_local_ip())
+                is_standby_guide = True
+                display_clip = "🚗 CAR DASH CAM // HARDWARE STANDBY"
+
+        # -------------------------------------------------------------
+        # Case 4: Specific Video Selected from Dropdown
+        # -------------------------------------------------------------
         elif src in PLAYLIST or str(src).endswith('.mp4'):
             if cap is None or not cap.isOpened() or last_opened_source != src:
                 current_video_file = src
@@ -327,7 +482,9 @@ def process_video():
                     cap = cv2.VideoCapture(resolved_path)
                     ret, raw_frame = cap.read() if cap else (False, None)
 
-        # Case 4: Autonomous Looping Video Playlist (src == 'auto')
+        # -------------------------------------------------------------
+        # Case 5: Autonomous Looping Video Playlist (src == 'auto')
+        # -------------------------------------------------------------
         else:
             if cap is None or not cap.isOpened() or last_opened_source != 'auto':
                 current_video_file = PLAYLIST[playlist_index]
@@ -345,6 +502,45 @@ def process_video():
 
         if raw_frame is None or raw_frame.size == 0:
             time.sleep(0.01)
+            continue
+
+        if is_standby_guide:
+            # Standby connection frame: bypass YOLO/lanes so instructions remain 100% crisp and readable
+            with lock:
+                current_frame = raw_frame
+                frame_seq_id += 1
+                telemetry_data = {
+                    "fps": 30.0,
+                    "latency_ms": 1.0,
+                    "brake_alert": False,
+                    "ttc": 0.0,
+                    "vehicle_count": 0,
+                    "closest_vehicle": "STANDBY",
+                    "pothole_count": 0,
+                    "traction_hazard": False,
+                    "texture_var": 0.0,
+                    "v2v_active": False,
+                    "v2v_event": "DEVICE STANDBY // WAITING FOR CONNECTION",
+                    "speed_kmh": 0,
+                    "speed_limit": 80,
+                    "overspeed": False,
+                    "climate_profile": "STANDBY",
+                    "gps_lat": round(active_lat, 5),
+                    "gps_lon": round(active_lon, 5),
+                    "gps_speed": active_gps_speed,
+                    "gps_active": is_gps_active,
+                    "heading": round(active_heading, 1),
+                    "elevation_m": int(active_alt),
+                    "road_name": active_road,
+                    "enhancements": ["DEVICE STANDBY", "AUTO-CONNECT ARMED"],
+                    "current_video": display_clip,
+                    "mode": active_mode,
+                    "features": active_features_dict,
+                    "source": src,
+                    "split_view": is_split,
+                    "local_ip": get_local_ip()
+                }
+            time.sleep(0.033)
             continue
 
         last_successful_frame_time = time.time()
@@ -372,12 +568,12 @@ def process_video():
         fps = 1.0 / max(current_time - prev_time, 1e-5)
         prev_time = current_time
 
-        if src == 'phone':
-            display_clip = "📱 LIVE MOBILE PHONE DASHCAM"
-        elif src in ['cam1', '1']:
-            display_clip = "📱 USB DASHCAM (PORT 1)"
-        elif src in ['cam0', '0']:
-            display_clip = "📷 LAPTOP WEBCAM (PORT 0)"
+        if src in ['phone', 'mobile']:
+            display_clip = "📱 LIVE MOBILE DASH CAM"
+        elif src in ['car', 'cam1', '1']:
+            display_clip = "🚗 LIVE CAR DASH CAM (USB)"
+        elif src in ['laptop', 'cam0', '0']:
+            display_clip = "💻 LIVE LAPTOP DASH CAM"
         elif src in PLAYLIST or str(src).endswith('.mp4'):
             display_clip = f"🎥 SELECTED CLIP: {src}"
         else:
@@ -421,8 +617,8 @@ def process_video():
             current_frame = dashboard_frame
             frame_seq_id += 1
 
-        # Frame pacing for video playback
-        if src not in ['phone', 'cam0', '0', 'cam1', '1']:
+        # Frame pacing for video playback (bypass for live camera devices)
+        if src not in ['phone', 'mobile', 'laptop', 'cam0', '0', 'car', 'cam1', '1']:
             elapsed = time.time() - start_process
             sleep_needed = max(0.0, 0.033 - elapsed)
             if sleep_needed > 0:
@@ -496,7 +692,7 @@ def camera_node():
 @app.route('/api/phone_frame', methods=['POST'])
 def receive_phone_frame():
     """Receives binary JPEG frames from mobile phone camera."""
-    global phone_frame_buffer, phone_last_seen, phone_frame_id, current_source, source_changed
+    global phone_frame_buffer, phone_last_seen, phone_frame_id
     try:
         data = request.get_data()
         if not data:
@@ -508,9 +704,27 @@ def receive_phone_frame():
                 phone_frame_buffer = frame
                 phone_last_seen = time.time()
                 phone_frame_id += 1
-                if current_source != 'phone':
-                    current_source = 'phone'
-                    source_changed = True
+            return jsonify({"status": "received"}), 200
+        return jsonify({"status": "decode_failed"}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/laptop_frame', methods=['POST'])
+def receive_laptop_frame():
+    """Receives binary JPEG frames from laptop webcam browser capture."""
+    global laptop_frame_buffer, laptop_last_seen, laptop_frame_id
+    try:
+        data = request.get_data()
+        if not data:
+            return jsonify({"status": "empty"}), 400
+        nparr = np.frombuffer(data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is not None and frame.size > 0:
+            with lock:
+                laptop_frame_buffer = frame
+                laptop_last_seen = time.time()
+                laptop_frame_id += 1
             return jsonify({"status": "received"}), 200
         return jsonify({"status": "decode_failed"}), 400
     except Exception as e:
