@@ -433,6 +433,16 @@ def generate_frames():
     """Generator yielding multipart JPEG frames."""
     global current_frame, frame_seq_id
     last_seq = -1
+
+    # Send immediate warmup frame so HTTP 200 headers flush instantly to Cloudflare/browser
+    warmup_img = np.zeros((360, 640, 3), dtype=np.uint8)
+    cv2.putText(warmup_img, "CLEAR-DRIVE AI // CONNECTING CAMERA FEED...", (35, 180),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 243, 255), 2, cv2.LINE_AA)
+    ret_w, buf_w = cv2.imencode('.jpg', warmup_img, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+    if ret_w:
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + buf_w.tobytes() + b'\r\n')
+
     while True:
         with lock:
             if current_frame is None or frame_seq_id == last_seq:

@@ -973,6 +973,7 @@
             <!-- Row 1: Dropdown Clip Selector & Optics -->
             <div class="matrix-row">
                 <select id="videoSelect" class="hud-select" onchange="changeSource()">
+                    <option value="auto">🔄 Autonomous Multi-Hazard Playlist</option>
                     <option value="traffic_dashcam.mp4">🚗 Demo 8: Highway Traffic & Distance (traffic_dashcam.mp4)</option>
                     <option value="foggy_dashcam.mp4">🌫️ Demo 1: Dense Himalayan Fog (foggy_dashcam.mp4)</option>
                     <option value="indian_rain.mp4">🌧️ Demo 2: Heavy Monsoon Rain (indian_rain.mp4)</option>
@@ -1225,7 +1226,12 @@
                 body: JSON.stringify({ source: val })
             })
             .then(res => res.json())
-            .then(d => addTerminalLog('SRC-SWITCH', `Stream source routed to: ${val.toUpperCase()}`))
+            .then(d => {
+                addTerminalLog('SRC-SWITCH', `Stream source routed to: ${val.toUpperCase()}`);
+                // Refresh stream connection immediately on source change
+                const sImg = document.getElementById('videoStream');
+                if (sImg) sImg.src = '/video_feed?t=' + Date.now();
+            })
             .catch(e => console.error(e));
         }
 
@@ -2001,6 +2007,23 @@
                 }
                 modalLink.href = camUrl;
                 modalLink.textContent = camUrl;
+            }
+
+            // Live Stream Reconnection Watchdog (Cold-boot recovery)
+            const streamImg = document.getElementById('videoStream');
+            if (streamImg) {
+                streamImg.onerror = function() {
+                    console.warn("[Stream Watchdog] Feed disconnected or cold boot. Retrying in 1.2s...");
+                    setTimeout(() => {
+                        streamImg.src = '/video_feed?t=' + Date.now();
+                    }, 1200);
+                };
+                // Auto-kick if initial connection timed out
+                setTimeout(() => {
+                    if (!streamImg.complete || streamImg.naturalWidth === 0) {
+                        streamImg.src = '/video_feed?t=' + Date.now();
+                    }
+                }, 2000);
             }
         });
     </script>
