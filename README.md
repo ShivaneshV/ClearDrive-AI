@@ -1,4 +1,14 @@
-﻿# 🚗 ClearDrive AI : Next-Gen Predictive V2X Omni-Vision Cockpit
+---
+title: ClearDrive AI
+emoji: 🚗
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+app_file: app.py
+pinned: false
+---
+
+# 🚗 ClearDrive AI : Next-Gen Predictive V2X Omni-Vision Cockpit
 
 [![Python](https://img.shields.io/badge/Python-3.9%20%7C%203.10%20%7C%203.11-blue.svg)](https://www.python.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-green.svg)](https://opencv.org/)
