@@ -156,8 +156,9 @@
             // Android Chrome strictly requires a Secure Context (HTTPS or localhost)
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 const warnBox = document.getElementById('httpsWarning');
-                const httpsLink = document.getElementById('httpsLink');
-                const targetHttps = `https://${window.location.hostname}:5001/camera`;
+                const targetHttps = (window.location.protocol === 'https:')
+                    ? window.location.href
+                    : `https://${window.location.hostname}:5001/camera`;
                 if (httpsLink) httpsLink.href = targetHttps;
                 if (warnBox) warnBox.style.display = 'block';
                 statusPill.textContent = 'HTTPS REQUIRED';

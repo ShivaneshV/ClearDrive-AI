@@ -1923,6 +1923,14 @@
                     updateFeatureButtons(data.features);
                 }
 
+                // Sync Source Dropdown with Active Perception Source
+                if (data.source) {
+                    const videoSelectEl = document.getElementById('videoSelect');
+                    if (videoSelectEl && videoSelectEl.value !== data.source) {
+                        videoSelectEl.value = data.source;
+                    }
+                }
+
                 // Perception Chips
                 const chipsContainer = document.getElementById('chipsContainer');
                 chipsContainer.innerHTML = '';
@@ -1980,6 +1988,20 @@
         window.addEventListener('load', () => {
             initNavMap();
             initRealtimeGPS();
+
+            // Auto-configure Mobile Camera URL based on current host & protocol
+            const modalLink = document.getElementById('modalUrlLink');
+            if (modalLink) {
+                let camUrl;
+                if (window.location.protocol === 'https:') {
+                    camUrl = `${window.location.origin}/camera`;
+                } else {
+                    const host = window.location.hostname || 'localhost';
+                    camUrl = `https://${host}:5001/camera`;
+                }
+                modalLink.href = camUrl;
+                modalLink.textContent = camUrl;
+            }
         });
     </script>
 </body>

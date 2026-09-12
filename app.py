@@ -253,22 +253,21 @@ def process_video():
         # Case 1: Wireless Mobile Phone Web Dashcam (/camera)
         if src == 'phone':
             with lock:
-                has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 3.5)
-                if has_phone and (phone_frame_id != last_processed_phone_id):
+                has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 4.0)
+                if has_phone:
                     raw_frame = phone_frame_buffer.copy()
-                    last_processed_phone_id = phone_frame_id
 
-            if raw_frame is None:
-                # If phone hasn't transmitted in >3s, temporarily read demo clip to prevent freeze
-                if now - phone_last_seen > 3.0:
-                    if cap is None or not cap.isOpened():
-                        cap = cv2.VideoCapture(resolve_video_path(PLAYLIST[0]))
-                    ret, raw_frame = cap.read() if cap else (False, None)
-                    if not ret or raw_frame is None:
-                        if cap: cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                else:
-                    time.sleep(0.01)
-                    continue
+            if raw_frame is not None:
+                if cap is not None:
+                    cap.release()
+                    cap = None
+            else:
+                # Standby: phone not yet transmitting or paused; stream demo clip so viewport stays alive
+                if cap is None or not cap.isOpened():
+                    cap = cv2.VideoCapture(resolve_video_path(PLAYLIST[0]))
+                ret, raw_frame = cap.read() if cap else (False, None)
+                if not ret or raw_frame is None:
+                    if cap: cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
         # Case 2: Hardware USB Camera (e.g. index 1 or 0)
         elif str(src).isdigit() or str(src).startswith('cam'):
@@ -477,7 +476,7 @@ def camera_node():
 @app.route('/api/phone_frame', methods=['POST'])
 def receive_phone_frame():
     """Receives binary JPEG frames from mobile phone camera."""
-    global phone_frame_buffer, phone_last_seen, phone_frame_id, current_source
+    global phone_frame_buffer, phone_last_seen, phone_frame_id, current_source, source_changed
     try:
         data = request.get_data()
         if not data:
@@ -489,7 +488,9 @@ def receive_phone_frame():
                 phone_frame_buffer = frame
                 phone_last_seen = time.time()
                 phone_frame_id += 1
-                current_source = 'phone'
+                if current_source != 'phone':
+                    current_source = 'phone'
+                    source_changed = True
             return jsonify({"status": "received"}), 200
         return jsonify({"status": "decode_failed"}), 400
     except Exception as e:
