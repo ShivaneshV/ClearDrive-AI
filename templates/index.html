@@ -1562,6 +1562,9 @@
             <button id="pwaInstallBtn" class="status-badge badge-cyan" style="cursor: pointer; background: rgba(0, 243, 255, 0.22); border: 1px solid var(--cyan-neon); font-weight: bold;" onclick="triggerPWAInstall()" title="Install ClearDrive AI as a native app on this device">
                 <span>📲</span> INSTALL APP
             </button>
+            <button class="status-badge badge-cyan" style="cursor: pointer; background: rgba(0, 243, 255, 0.15); border: 1px solid var(--cyan-neon); font-weight: bold;" onclick="forceAppRefresh()" title="1-Tap Sync to fetch latest UI/UX without cache">
+                <span>🔄</span> SYNC
+            </button>
         </div>
     </header>
 
@@ -3489,8 +3492,45 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(() => {});
+                navigator.serviceWorker.register('/sw.js?v=3').then((reg) => {
+                    // Check for updates whenever user loads the page
+                    reg.update().catch(() => {});
+                    // Check for updates when mobile user returns to the app
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible') {
+                            reg.update().catch(() => {});
+                        }
+                    });
+                }).catch(() => {});
+
+                // Auto-refresh when new service worker takes over so mobile users get latest UI automatically
+                let isRefreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (!isRefreshing) {
+                        isRefreshing = true;
+                        window.location.reload();
+                    }
+                });
             });
+        }
+
+        // 1-Tap Force Sync function for mobile & desktop
+        function forceAppRefresh() {
+            addTerminalLog('SYSTEM', 'Purging cached UI/UX and fetching latest version...');
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then((regs) => {
+                    for (let reg of regs) reg.update().catch(() => {});
+                });
+            }
+            if ('caches' in window) {
+                caches.keys().then((names) => {
+                    Promise.all(names.map((n) => caches.delete(n))).then(() => {
+                        window.location.reload();
+                    });
+                }).catch(() => window.location.reload());
+            } else {
+                window.location.reload();
+            }
         }
 
         window.addEventListener('beforeinstallprompt', (e) => {

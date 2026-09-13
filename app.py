@@ -21,7 +21,7 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import threading
 import numpy as np
-from flask import Flask, Response, render_template, jsonify, request, send_from_directory
+from flask import Flask, Response, render_template, jsonify, request, send_from_directory, make_response
 from engine import OmniVisionEngine
 
 # Streamlit Community Cloud Autodetect Hook (if launched via 'streamlit run app.py')
@@ -717,13 +717,27 @@ def index():
 @app.route('/manifest.json')
 def manifest():
     """Serves PWA Web App Manifest."""
-    return send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
+    resp = make_response(send_from_directory('static', 'manifest.json', mimetype='application/manifest+json'))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    return resp
 
 
 @app.route('/sw.js')
 def service_worker():
-    """Serves PWA Service Worker."""
-    return send_from_directory('static', 'sw.js', mimetype='application/javascript')
+    """Serves PWA Service Worker with zero-caching headers so mobile automatically updates."""
+    resp = make_response(send_from_directory('static', 'sw.js', mimetype='application/javascript'))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    return resp
+
+
+@app.after_request
+def add_no_cache_headers(response):
+    """Ensures mobile browsers and PWAs never serve stale HTML or Service Worker files."""
+    if response.mimetype in ['text/html', 'application/javascript', 'application/manifest+json']:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/camera')
