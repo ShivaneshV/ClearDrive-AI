@@ -1,7 +1,7 @@
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const backend = "https://disks-rugby-tips-friend.trycloudflare.com";
+    const backend = "https://heater-integrate-unable-apply.trycloudflare.com";
     const targetUrl = new URL(url.pathname + url.search, backend);
 
     const newHeaders = new Headers(request.headers);
