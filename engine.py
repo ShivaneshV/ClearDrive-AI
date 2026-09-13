@@ -473,9 +473,8 @@ class OmniVisionEngine:
         self.frame_idx += 1
         now = time.time()
 
-        # Cloud CPU optimization: on limited cloud containers, run YOLO every 3rd frame for high FPS
-        is_cloud = bool(os.environ.get('RENDER') or os.environ.get('PORT') or os.environ.get('SPACE_ID'))
-        yolo_interval = 3 if is_cloud else 2
+        # High-FPS CPU Cadence: run YOLO inference every 3rd frame with smooth inter-frame tracking interpolation
+        yolo_interval = 3
         run_yolo = (self.model is not None) and ((self.frame_idx % yolo_interval == 1) or (not self.cached_targets))
 
         if run_yolo:
@@ -484,7 +483,7 @@ class OmniVisionEngine:
                 classes=self.target_classes,
                 conf=0.25,
                 verbose=False,
-                imgsz=288 if is_cloud else 320,
+                imgsz=288,
                 device='cpu'
             )[0]
 

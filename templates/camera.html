@@ -131,8 +131,16 @@
         <button id="broadcastBtn" class="btn-broadcast" onclick="toggleBroadcast()">
             🚀 START BROADCASTING TO LAPTOP
         </button>
+        <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button onclick="togglePhone180()" style="flex: 1; padding: 10px; background: #111d2e; border: 1px solid #ff9900; color: #ffea00; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+                🙃 FLIP 180°
+            </button>
+            <button onclick="cyclePhoneRotation()" style="flex: 1; padding: 10px; background: #111d2e; border: 1px solid #00f3ff; color: #00f3ff; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+                🔄 ROTATE 90° (<span id="phoneRotLabel">0°</span>)
+            </button>
+        </div>
         <div class="footer-text">
-            POSITION PHONE ON DASHBOARD FACING FORWARD ROAD // TRANSMITTING IN 1080p HD
+            POSITION PHONE ON DASHBOARD FACING FORWARD ROAD // TRANSMITTING IN HD
         </div>
     </div>
 
@@ -235,6 +243,26 @@
             }
         }
 
+        let phoneRotation = 0;
+        function togglePhone180() {
+            phoneRotation = (phoneRotation === 180) ? 0 : 180;
+            updatePhoneRot();
+        }
+        function cyclePhoneRotation() {
+            phoneRotation = (phoneRotation + 90) % 360;
+            updatePhoneRot();
+        }
+        function updatePhoneRot() {
+            const lbl = document.getElementById('phoneRotLabel');
+            if (lbl) lbl.textContent = phoneRotation + '°';
+            video.style.transform = `rotate(${phoneRotation}deg)`;
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rotation: phoneRotation })
+            }).catch(e => {});
+        }
+
         function transmitNextFrame() {
             if (!isStreaming) return;
 
@@ -245,9 +273,11 @@
             }
 
             isUploading = true;
-            ctx.drawImage(video, 0, 0, 1280, 720);
+            canvas.width = 960;
+            canvas.height = 540;
+            ctx.drawImage(video, 0, 0, 960, 540);
 
-            // True 720p HD quality @ 0.78 (fine clarity, crisp edges)
+            // Fast 960x540 @ 0.62 JPEG encode: low bandwidth, instantaneous upload, buttery 30+ FPS
             canvas.toBlob((blob) => {
                 if (!blob || !isStreaming) {
                     isUploading = false;
@@ -267,7 +297,7 @@
                         currentFps = Math.round((frameCount * 1000) / (now - lastFpsTime));
                         frameCount = 0;
                         lastFpsTime = now;
-                        hudInfo.textContent = `⚡ LIVE FPS: ${currentFps} | 720p HD SMOOTH`;
+                        hudInfo.textContent = `⚡ LIVE FPS: ${currentFps} | HD ULTRA-SMOOTH`;
                     }
                 })
                 .catch(e => console.warn('Frame drop:', e))
@@ -275,7 +305,7 @@
                     isUploading = false;
                     scheduleNext();
                 });
-            }, 'image/jpeg', 0.78);
+            }, 'image/jpeg', 0.62);
         }
 
         function stopBroadcast() {

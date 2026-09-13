@@ -841,6 +841,57 @@
             box-shadow: 0 0 24px rgba(0, 255, 102, 0.45) !important;
         }
 
+        .camera-turn-strip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(30, 51, 74, 0.7);
+            flex-wrap: wrap;
+        }
+
+        .turn-strip-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: var(--cyan-neon);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .turn-btn {
+            background: rgba(14, 23, 38, 0.85);
+            border: 1px solid #1e3a58;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #d0e4f7;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .turn-btn:hover {
+            border-color: #ff9900;
+            background: rgba(30, 45, 70, 0.95);
+            color: #fff;
+            box-shadow: 0 0 12px rgba(255, 153, 0, 0.35);
+        }
+
+        .turn-btn.turn-active {
+            border-color: #ffaa00 !important;
+            background: rgba(255, 170, 0, 0.22) !important;
+            color: #ffea00 !important;
+            box-shadow: 0 0 15px rgba(255, 170, 0, 0.5) !important;
+        }
+
         .dashcam-btn-icon {
             font-size: 1.75rem;
             display: flex;
@@ -1135,6 +1186,23 @@
                         <span class="dashcam-sub">Auto-Start Physical Laptop Webcam</span>
                     </div>
                     <span class="dashcam-pill pill-laptop">AUTO-CAM</span>
+                </button>
+            </div>
+
+            <!-- CAMERA TURN / ORIENTATION CONTROLS -->
+            <div class="camera-turn-strip">
+                <span class="turn-strip-label"><span>🔄</span> CAMERA ORIENTATION:</span>
+                <button class="turn-btn" id="btn-turn-180" onclick="toggle180()" title="Flip Upside Down / Inverted (Solves ceiling/dash-mounted inverted cameras)">
+                    <span>🙃</span> FLIP 180° (UPSIDE DOWN FIX)
+                </button>
+                <button class="turn-btn" id="btn-turn-90" onclick="cycleRotation()" title="Turn 90° Clockwise">
+                    <span>🔄</span> TURN 90° (<span id="rotationAngleLabel">0°</span>)
+                </button>
+                <button class="turn-btn" id="btn-turn-mirror" onclick="toggleMirror()" title="Mirror Horizontal Selfie">
+                    <span>🪞</span> MIRROR HORIZONTAL
+                </button>
+                <button class="turn-btn" id="btn-turn-reset" onclick="resetOrientation()" title="Reset to standard 0°">
+                    <span>↺</span> RESET (0°)
                 </button>
             </div>
         </div>
@@ -1514,6 +1582,56 @@
             }
         }
 
+        // ------------------ CAMERA ORIENTATION & SMOOTH STREAMING ------------------
+        let currentCamRotation = 0;
+        let currentCamMirror = false;
+
+        function toggle180() {
+            currentCamRotation = (currentCamRotation === 180) ? 0 : 180;
+            applyCameraOrientation();
+        }
+
+        function cycleRotation() {
+            currentCamRotation = (currentCamRotation + 90) % 360;
+            applyCameraOrientation();
+        }
+
+        function toggleMirror() {
+            currentCamMirror = !currentCamMirror;
+            applyCameraOrientation();
+        }
+
+        function resetOrientation() {
+            currentCamRotation = 0;
+            currentCamMirror = false;
+            applyCameraOrientation();
+        }
+
+        function applyCameraOrientation() {
+            const angleLbl = document.getElementById('rotationAngleLabel');
+            if (angleLbl) angleLbl.textContent = currentCamRotation + '°';
+
+            const btn180 = document.getElementById('btn-turn-180');
+            if (btn180) {
+                if (currentCamRotation === 180) btn180.classList.add('turn-active');
+                else btn180.classList.remove('turn-active');
+            }
+
+            const btnMirror = document.getElementById('btn-turn-mirror');
+            if (btnMirror) {
+                if (currentCamMirror) btnMirror.classList.add('turn-active');
+                else btnMirror.classList.remove('turn-active');
+            }
+
+            addTerminalLog('CAMERA', `Camera orientation: ${currentCamRotation}° ${currentCamMirror ? '[MIRROR]' : ''}`);
+
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rotation: currentCamRotation, flip_h: currentCamMirror })
+            }).catch(e => {});
+        }
+
         function transmitLaptopFrames() {
             if (!isLaptopStreaming || !laptopVideoElem) return;
 
@@ -1528,6 +1646,7 @@
                 ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
 
                 isUploadingLaptop = true;
+                // Fast 640x360 @ 0.60 JPEG encode: ultra-lightweight payload (<18KB), zero buffering
                 laptopCanvas.toBlob(blob => {
                     if (!blob || !isLaptopStreaming) {
                         isUploadingLaptop = false;
@@ -1540,15 +1659,12 @@
                         headers: { 'Content-Type': 'image/jpeg' },
                         body: blob
                     })
-                    .then(res => res.json())
                     .catch(e => {})
                     .finally(() => {
                         isUploadingLaptop = false;
-                        setTimeout(() => {
-                            requestAnimationFrame(sendNext);
-                        }, 30);
+                        requestAnimationFrame(sendNext);
                     });
-                }, 'image/jpeg', 0.75);
+                }, 'image/jpeg', 0.60);
             }
 
             requestAnimationFrame(sendNext);

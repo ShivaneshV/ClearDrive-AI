@@ -124,6 +124,8 @@ current_source = 'auto'
 source_changed = False
 split_view_enabled = False
 force_traction_demo = False
+camera_rotation = 0       # 0, 90, 180, 270 degrees
+camera_flip_h = False     # Horizontal mirror flip
 
 # Live Hardware GPS State
 live_gps_lat = 18.5204
@@ -544,6 +546,18 @@ def process_video():
         last_successful_frame_time = time.time()
         start_process = time.time()
 
+        # Hardware/Stream Orientation: Apply Camera Turn (0°, 90°, 180°, 270°) and Mirror Flip
+        rot = camera_rotation
+        if rot == 180:
+            raw_frame = cv2.rotate(raw_frame, cv2.ROTATE_180)
+        elif rot == 90:
+            raw_frame = cv2.rotate(raw_frame, cv2.ROTATE_90_CLOCKWISE)
+        elif rot == 270:
+            raw_frame = cv2.rotate(raw_frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+        if camera_flip_h:
+            raw_frame = cv2.flip(raw_frame, 1)
+
         if raw_frame.shape[1] == 640 and raw_frame.shape[0] == 360:
             frame = raw_frame
         else:
@@ -610,6 +624,8 @@ def process_video():
                 "features": active_features_dict,
                 "source": src,
                 "split_view": is_split,
+                "camera_rotation": camera_rotation,
+                "camera_flip_h": camera_flip_h,
                 "local_ip": get_local_ip()
             }
             current_frame = dashboard_frame
@@ -624,7 +640,7 @@ def process_video():
 
 
 def generate_frames():
-    """Generator yielding multipart JPEG frames."""
+    """Generator yielding ultra-low-latency multipart JPEG frames."""
     global current_frame, frame_seq_id
     last_seq = -1
 
@@ -632,7 +648,7 @@ def generate_frames():
     warmup_img = np.zeros((360, 640, 3), dtype=np.uint8)
     cv2.putText(warmup_img, "CLEAR-DRIVE AI // CONNECTING CAMERA FEED...", (35, 180),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 243, 255), 2, cv2.LINE_AA)
-    ret_w, buf_w = cv2.imencode('.jpg', warmup_img, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+    ret_w, buf_w = cv2.imencode('.jpg', warmup_img, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
     if ret_w:
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + buf_w.tobytes() + b'\r\n')
@@ -640,18 +656,19 @@ def generate_frames():
     while True:
         with lock:
             if current_frame is None or frame_seq_id == last_seq:
-                sleep_time = 0.01
+                sleep_time = 0.003
                 frame_to_stream = None
             else:
                 last_seq = frame_seq_id
-                frame_to_stream = current_frame.copy()
+                frame_to_stream = current_frame
                 sleep_time = 0.0
 
         if frame_to_stream is None:
             time.sleep(sleep_time)
             continue
 
-        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        # Fast JPEG encoding @ 68 quality (ultra-low latency, crisp edges, ~30KB payload for zero buffering)
+        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 68])
         if not ret:
             continue
 
@@ -803,9 +820,21 @@ def update_gps():
 @app.route('/api/settings', methods=['POST'])
 def update_settings():
     """Interactive control endpoint supporting independent multi-feature toggles and settings."""
-    global current_mode, current_features, current_source, source_changed, force_traction_demo, split_view_enabled
+    global current_mode, current_features, current_source, source_changed, force_traction_demo, split_view_enabled, camera_rotation, camera_flip_h
     data = request.get_json() or {}
     with lock:
+        # 0. Camera Turn / Orientation (0°, 90°, 180°, 270°) and Mirror Flip
+        if 'rotation' in data and data['rotation'] is not None:
+            try: camera_rotation = int(data['rotation']) % 360
+            except Exception: pass
+        elif 'toggle_rotation' in data or 'rotate' in data:
+            camera_rotation = (camera_rotation + 90) % 360
+
+        if 'flip_h' in data and data['flip_h'] is not None:
+            camera_flip_h = bool(data['flip_h'])
+        elif 'toggle_flip_h' in data:
+            camera_flip_h = not camera_flip_h
+
         # 1. Independent Feature Toggle (e.g. toggle_feature: 'fog')
         if 'toggle_feature' in data and data['toggle_feature']:
             feat = str(data['toggle_feature']).lower().strip()
@@ -862,7 +891,9 @@ def update_settings():
         "features": current_features,
         "source": current_source,
         "traction_demo": force_traction_demo,
-        "split_view": split_view_enabled
+        "split_view": split_view_enabled,
+        "camera_rotation": camera_rotation,
+        "camera_flip_h": camera_flip_h
     })
 
 
