@@ -744,6 +744,7 @@ def process_video():
             frame = cv2.resize(raw_frame, (640, 360), interpolation=cv2.INTER_LINEAR)
 
         # Run Next-Gen Omni-Vision Predictive ADAS Pipeline
+        active_video_source = src if src in ['laptop', 'cam0', '0', 'phone', 'mobile', 'car', 'cam1', '1'] else current_video_file
         dashboard_frame, emergency_brake, min_ttc, tele = engine.process(
             frame,
             mode=active_mode,
@@ -751,7 +752,7 @@ def process_video():
             v2v_payload=active_v2v_payload,
             force_traction_demo=is_traction_forced,
             split_view=is_split,
-            active_video_name=current_video_file,
+            active_video_name=active_video_source,
             live_speed=active_gps_speed
         )
         latency_ms = (time.time() - start_process) * 1000.0
@@ -772,7 +773,7 @@ def process_video():
                 tele["enhancements"] = ["🚗 CAR DASH CAM ACTIVE", f"HARDWARE USB ({external_usb_cam_name or 'UVC'})"]
         elif src in ['laptop', 'cam0', '0']:
             display_clip = "💻 LIVE LAPTOP DASH CAM"
-            tele["enhancements"] = ["💻 LAPTOP DASH CAM ACTIVE", "BUILT-IN HARDWARE WEBCAM"]
+            tele["enhancements"] = ["💻 LAPTOP DASH CAM ACTIVE", "CABIN CAM // DRIVER ALERT"]
         elif src in PLAYLIST or str(src).endswith('.mp4'):
             display_clip = f"🎥 SELECTED CLIP: {src}"
         else:

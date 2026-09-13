@@ -558,9 +558,28 @@ class OmniVisionEngine:
 
         # Vegetation / foliage filter: trees, bushes, grass have green/yellow hues with saturation >= 25
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        h_ch, s_ch, _ = cv2.split(hsv)
+        h_ch, s_ch, v_ch = cv2.split(hsv)
         foliage_mask = ((h_ch >= 20) & (h_ch <= 95) & (s_ch >= 25))
         corridor_mask[foliage_mask] = 0
+
+        # Human skin & face rejection: asphalt road CANNOT contain human skin (driver, face, hands, body)
+        ycrcb = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+        _, cr, cb = cv2.split(ycrcb)
+        skin = ((cr >= 135) & (cr <= 170) & 
+                (cb >= 85) & (cb <= 125) & 
+                ((h_ch <= 22) | (h_ch >= 168)) & 
+                (s_ch >= 28) & (s_ch <= 165) & 
+                (v_ch >= 45)).astype(np.uint8)
+
+        # If corridor contains human skin (e.g. driver in cabin/webcam view), abort pothole detection
+        skin_in_corridor = np.sum((corridor_mask == 255) & (skin == 1))
+        total_corridor = np.sum(corridor_mask == 255)
+        if total_corridor > 50 and (skin_in_corridor / total_corridor) > 0.05:
+            return frame.copy(), 0
+
+        # Dilate skin mask to wipe out eyes, eyebrows, hair, lips, neck, and any facial features
+        skin_dilated = cv2.dilate(skin, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (35, 35)))
+        corridor_mask[skin_dilated > 0] = 0
 
         # Potholes are physically on the road surface in front of the vehicle
         corridor_mask[:int(h * 0.62), :] = 0
@@ -602,6 +621,11 @@ class OmniVisionEngine:
                                 mean_h = np.mean(roi_hsv[:, :, 0])
                                 # Strict rejection of foliage/leaves/colored artifacts
                                 if (20 <= mean_h <= 95 and mean_s >= 25) or mean_s > 48:
+                                    continue
+
+                                # Reject if adjacent to skin (e.g. eye, ear, forehead)
+                                roi_skin = skin[max(y - 10, 0):min(y + h_box + 10, h), max(x - 10, 0):min(x + w_box + 10, w)]
+                                if roi_skin.size > 0 and np.mean(roi_skin) > 0.03:
                                     continue
 
                                 pothole_count += 1
@@ -867,19 +891,25 @@ class OmniVisionEngine:
             active_enhancements.append("CYBER-LIDAR 64-BEAM")
 
         # Step G: AR Lane Guidance (Laser boundary rails, distance hashes, and real-time lane tracking)
+        is_cabin_camera = any(k in vid_lower for k in ['laptop', 'cam0', 'cabin', 'selfie', 'front'])
         lane_state, lane_dir, lane_arrow = self.detect_lane_position(enhanced, corridor_poly)
         if feat_lanes:
-            enhanced = self.draw_ar_lane_guidance(
-                enhanced, corridor_poly,
-                is_traction_hazard=is_traction_hazard,
-                lane_state=lane_state,
-                lane_dir=lane_dir,
-                lane_arrow=lane_arrow
-            )
-            active_enhancements.append(f"LANE: {lane_state} {lane_arrow}")
+            if not is_cabin_camera:
+                enhanced = self.draw_ar_lane_guidance(
+                    enhanced, corridor_poly,
+                    is_traction_hazard=is_traction_hazard,
+                    lane_state=lane_state,
+                    lane_dir=lane_dir,
+                    lane_arrow=lane_arrow
+                )
+                active_enhancements.append(f"LANE: {lane_state} {lane_arrow}")
+            else:
+                lane_state = "CABIN VIEW"
+                lane_arrow = "●"
+                active_enhancements.append("CABIN: DRIVER ACTIVE")
 
         # Step H: Vehicle Radar, Distance & Ghost-Vision Tracking
-        if feat_radar:
+        if feat_radar and not is_cabin_camera:
             enhanced, _, ttc, targets, closest_d = self.track_targets_and_ghost_vision(
                 enhanced, corridor_poly, force_ghost=True
             )
@@ -893,8 +923,8 @@ class OmniVisionEngine:
         brake_alert = False
 
         # Step I: Road Pothole Scanner (Neon green, 3D asphalt isolated)
-        scan_potholes = feat_potholes
-        if mode == 'auto':
+        scan_potholes = feat_potholes and not is_cabin_camera
+        if mode == 'auto' and not is_cabin_camera:
             scan_potholes = (avg_brightness >= 40.0) or ('pothole' in vid_lower)
         if scan_potholes:
             t_boxes = [t['box'] for t in targets]
