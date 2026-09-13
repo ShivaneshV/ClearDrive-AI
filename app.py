@@ -127,14 +127,14 @@ force_traction_demo = False
 camera_rotation = 0       # 0, 90, 180, 270 degrees
 camera_flip_h = False     # Horizontal mirror flip
 
-# Live Hardware GPS State
-live_gps_lat = 18.5204
-live_gps_lon = 73.8567
-live_gps_speed = None
+# Live Hardware GPS State (Defaults to Chennai, Tamil Nadu - updated dynamically by client)
+live_gps_lat = 13.0827
+live_gps_lon = 80.2707
+live_gps_speed = 0.0
 live_gps_heading = 0.0
-live_gps_altitude = 560
+live_gps_altitude = 12
 live_gps_active = False
-live_gps_road = "NH-48 EXPRESSWAY (MUMBAI-PUNE)"
+live_gps_road = "CHENNAI METRO (TAMIL NADU)"
 
 # V2X Mesh State
 active_v2v_payload = None
@@ -165,14 +165,14 @@ telemetry_data = {
     "texture_var": 0.0,
     "v2v_active": False,
     "v2v_event": "V2V MESH ACTIVE // LISTENING",
-    "speed_kmh": 74,
+    "speed_kmh": 0,
     "speed_limit": 80,
     "overspeed": False,
     "climate_profile": "OPTIMAL / CLEAR ROAD",
-    "gps_lat": 18.5204,
-    "gps_lon": 73.8567,
-    "elevation_m": 560,
-    "road_name": "NH-48 EXPRESSWAY (MUMBAI-PUNE)",
+    "gps_lat": 13.0827,
+    "gps_lon": 80.2707,
+    "elevation_m": 12,
+    "road_name": "CHENNAI METRO (TAMIL NADU)",
     "enhancements": ["INITIALIZING PREDICTIVE ENGINE..."],
     "current_video": PLAYLIST[0],
     "mode": "auto",
@@ -656,7 +656,7 @@ def generate_frames():
     while True:
         with lock:
             if current_frame is None or frame_seq_id == last_seq:
-                sleep_time = 0.003
+                sleep_time = 0.004
                 frame_to_stream = None
             else:
                 last_seq = frame_seq_id
@@ -667,13 +667,16 @@ def generate_frames():
             time.sleep(sleep_time)
             continue
 
-        # Fast JPEG encoding @ 68 quality (ultra-low latency, crisp edges, ~30KB payload for zero buffering)
-        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 68])
+        # Fast JPEG encoding @ 58 quality (~16KB payload for zero buffer lag over Cloudflare and WiFi)
+        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 58, int(cv2.IMWRITE_JPEG_OPTIMIZE), 1])
         if not ret:
             continue
 
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        
+        # Pacing to avoid TCP queue backlog over tunnels
+        time.sleep(0.025)
 
 
 # ==============================================================================

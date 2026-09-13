@@ -576,6 +576,33 @@
             color: var(--cyan-neon);
         }
 
+        .nav-travel-modes {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .nav-mode-btn {
+            background: #060912;
+            border: 1px solid #1a2d47;
+            color: #8daac7;
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .nav-mode-btn:hover, .nav-mode-btn.mode-active {
+            color: #ffffff;
+            border-color: var(--cyan-neon);
+            background: rgba(0, 243, 255, 0.20);
+            box-shadow: 0 0 8px var(--cyan-glow);
+        }
+
         .nav-layer-btns {
             display: flex;
             align-items: center;
@@ -721,6 +748,36 @@
             z-index: 1;
         }
 
+        /* Floating Google Maps Locate Me Button */
+        .gmaps-locate-btn {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            z-index: 1000;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(9, 14, 26, 0.92);
+            border: 2px solid var(--cyan-neon);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8), 0 0 10px var(--cyan-glow);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .gmaps-locate-btn:hover {
+            background: var(--cyan-neon);
+            box-shadow: 0 0 18px var(--cyan-neon);
+            transform: scale(1.08);
+        }
+        .gmaps-locate-btn:hover svg {
+            stroke: #000000;
+        }
+        .gmaps-locate-btn:hover svg circle {
+            fill: #000000;
+        }
+
         /* Guidance Card */
         .nav-guidance-card {
             background: #060a14;
@@ -731,6 +788,127 @@
             justify-content: space-between;
             gap: 12px;
             flex-wrap: wrap;
+        }
+
+        .guidance-arrival-banner {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(90deg, rgba(0, 243, 255, 0.12), rgba(0, 255, 102, 0.08));
+            border: 1px solid rgba(0, 243, 255, 0.35);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 4px;
+        }
+        .guidance-arrival-title {
+            font-size: 0.62rem;
+            font-family: var(--font-mono);
+            color: #8daac7;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+        .guidance-arrival-val {
+            font-size: 1.15rem;
+            font-family: var(--font-mono);
+            font-weight: 900;
+            color: #00f3ff;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+
+        /* Maneuver Bar & Step Drawer */
+        .nav-maneuver-bar {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #09101d;
+            border: 1px solid #1a2d47;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            gap: 10px;
+        }
+        .nav-maneuver-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+            color: var(--cyan-neon);
+            filter: drop-shadow(0 0 6px var(--cyan-glow));
+        }
+        .nav-maneuver-text-group {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+        .nav-maneuver-dist {
+            font-size: 0.70rem;
+            font-family: var(--font-mono);
+            color: #00ff66;
+            font-weight: bold;
+        }
+        .nav-maneuver-instr {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .nav-steps-toggle-btn {
+            background: rgba(0, 243, 255, 0.12);
+            border: 1px solid var(--cyan-neon);
+            color: var(--cyan-neon);
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .nav-steps-toggle-btn:hover {
+            background: var(--cyan-neon);
+            color: #000;
+        }
+        .nav-steps-drawer {
+            width: 100%;
+            max-height: 180px;
+            overflow-y: auto;
+            background: #050811;
+            border: 1px solid #162942;
+            border-radius: 6px;
+            padding: 6px 8px;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+        .nav-step-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px;
+            background: rgba(9, 16, 29, 0.7);
+            border-radius: 4px;
+            border-left: 3px solid var(--cyan-neon);
+            font-size: 0.75rem;
+        }
+        .nav-step-icon {
+            font-size: 1rem;
+            color: var(--cyan-neon);
+            flex-shrink: 0;
+        }
+        .nav-step-text {
+            flex: 1;
+            color: #d1e2f2;
+        }
+        .nav-step-dist {
+            font-family: var(--font-mono);
+            font-size: 0.70rem;
+            color: #6d8ba6;
+            white-space: nowrap;
         }
 
         .guidance-metric {
@@ -1375,6 +1553,9 @@
         </div>
 
         <div class="header-status-strip">
+            <div id="liveClockPill" class="status-badge badge-cyan" style="font-family: var(--font-mono); font-size: 0.78rem; font-weight: bold; letter-spacing: 0.5px;">
+                <span>🕒</span> <span id="headerLiveDate">--</span> &bull; <span id="headerLiveClock" style="color: #ffffff; font-weight: 900;">--:--:--</span>
+            </div>
             <div id="climateBadge" class="status-badge badge-cyan">CLIMATE: ADAPTIVE AUTO</div>
             <div id="tractionBadge" class="status-badge badge-cyan">HYDRO-GRIP: OPTIMAL</div>
             <div id="aebBadge" class="status-badge badge-green">AEB: ARMED</div>
@@ -1396,7 +1577,7 @@
             </div>
             <div class="tele-card">
                 <div class="tele-label">SPEEDOMETER</div>
-                <div id="t-speed" class="tele-value val-good">74 km/h</div>
+                <div id="t-speed" class="tele-value val-good">0 km/h</div>
                 <div id="t-limit" class="tele-sub">LIMIT: 80 km/h</div>
             </div>
             <div class="tele-card">
@@ -1468,8 +1649,13 @@
                         <span>🗺️ GOOGLE-SYNC NAVIGATOR</span>
                         <span id="gpsStatusPill" class="status-badge badge-green" style="font-size: 0.65rem; padding: 2px 7px;">GPS ACTIVE</span>
                     </div>
+                    <div class="nav-travel-modes">
+                        <button class="nav-mode-btn mode-active" id="btn-mode-driving" onclick="setTravelMode('driving')" title="Driving Mode">🚗 DRIVE</button>
+                        <button class="nav-mode-btn" id="btn-mode-bike" onclick="setTravelMode('bike')" title="Two-Wheeler / Bike Mode">🏍️ BIKE</button>
+                        <button class="nav-mode-btn" id="btn-mode-walking" onclick="setTravelMode('walking')" title="Walking Mode">🚶 WALK</button>
+                    </div>
                     <div class="nav-layer-btns">
-                        <button class="nav-layer-btn" id="btn-layer-sat" onclick="switchMapLayer('satellite')">🛰️ SATELLITE</button>
+                        <button class="nav-layer-btn" id="btn-layer-sat" onclick="switchMapLayer('satellite')">🛰️ SAT</button>
                         <button class="nav-layer-btn" id="btn-layer-traffic" onclick="switchMapLayer('traffic')">🚦 TRAFFIC</button>
                         <button class="nav-layer-btn" id="btn-layer-road" onclick="switchMapLayer('roadmap')">🗺️ ROAD</button>
                         <button class="nav-layer-btn" id="btn-layer-terrain" onclick="switchMapLayer('terrain')">⛰️ TERRAIN</button>
@@ -1480,28 +1666,72 @@
                 <!-- Destination Search & Routing Bar with Live Autocomplete -->
                 <div class="nav-search-bar">
                     <div class="nav-search-wrapper">
-                        <input type="text" id="destSearchInput" class="nav-input" placeholder="Search destination (e.g. Airport, Taj Mahal, Connaught Place)..." autocomplete="off" oninput="handleSearchInput(this.value)" onkeydown="handleSearchKey(event)">
+                        <input type="text" id="destSearchInput" class="nav-input" placeholder="Search destination (e.g. Marina Beach, Airport, Chennai Central)..." autocomplete="off" oninput="handleSearchInput(this.value)" onkeydown="handleSearchKey(event)">
                         <div id="navSuggestionsDropdown" class="nav-suggestions-dropdown" style="display: none;"></div>
                     </div>
                     <button class="nav-search-btn" id="btnSearchRoute" onclick="searchAndRoute()">NAVIGATE 🚗</button>
-                    <button class="nav-search-btn" style="padding: 8px 10px;" onclick="recenterVehicle()" title="Recenter to car GPS">🎯</button>
+                    <button class="nav-search-btn" style="padding: 8px 10px;" onclick="locateUserExact()" title="Locate my position">🎯</button>
                 </div>
 
                 <!-- Interactive Leaflet / Google Map Container -->
-                <div id="navMap"></div>
+                <div style="position: relative; width: 100%; flex: 1;">
+                    <div id="navMap"></div>
+                    <!-- Floating Google Maps Locate Me Button -->
+                    <button class="gmaps-locate-btn" id="btnLocateUser" onclick="locateUserExact()" title="Show Your Exact Location">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#00f3ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="1" x2="12" y2="4"></line>
+                            <line x1="12" y1="20" x2="12" y2="23"></line>
+                            <line x1="1" y1="12" x2="4" y2="12"></line>
+                            <line x1="20" y1="12" x2="23" y2="12"></line>
+                            <circle cx="12" cy="12" r="7"></circle>
+                            <circle cx="12" cy="12" r="2.5" fill="#00f3ff"></circle>
+                        </svg>
+                    </button>
+                </div>
 
                 <!-- Live Route Guidance & Turn-by-Turn Card -->
                 <div class="nav-guidance-card">
+                    <!-- Google Maps Arrival Time & Traffic Banner -->
+                    <div class="guidance-arrival-banner" id="guidanceArrivalBanner">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.3rem;">🏁</span>
+                            <div>
+                                <div class="guidance-arrival-title">YOU WILL REACH THERE AT</div>
+                                <div id="routeArrivalTime" class="guidance-arrival-val">--:-- --</div>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div id="routeTrafficBadge" class="status-badge badge-green" style="font-size: 0.65rem; padding: 3px 8px; display: inline-flex;">🟢 FASTEST ROUTE</div>
+                            <div id="routeTimeRemaining" style="font-size: 0.72rem; font-family: var(--font-mono); color: #8daac7; margin-top: 3px;">Ready for navigation</div>
+                        </div>
+                    </div>
+
+                    <!-- Next Maneuver Bar -->
+                    <div class="nav-maneuver-bar" id="navManeuverBar">
+                        <div class="nav-maneuver-icon" id="nextManeuverIcon">⬆️</div>
+                        <div class="nav-maneuver-text-group">
+                            <span class="nav-maneuver-dist" id="nextManeuverDist">IN 200 M</span>
+                            <span class="nav-maneuver-instr" id="nextManeuverInstr">Proceed along current route</span>
+                        </div>
+                        <button class="nav-steps-toggle-btn" id="btnToggleSteps" onclick="toggleRouteSteps()">📋 STEPS (<span id="routeStepsCount">0</span>) ▾</button>
+                    </div>
+
+                    <!-- Collapsible Step-by-Step Directions Drawer -->
+                    <div class="nav-steps-drawer" id="routeStepsDrawer">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+
+                    <!-- Route Metrics Row -->
                     <div class="guidance-metric">
                         <span class="guidance-metric-lbl">DESTINATION</span>
-                        <span class="guidance-maneuver" id="routeDestLabel">NH-48 EXPRESS ROUTE</span>
+                        <span class="guidance-maneuver" id="routeDestLabel">SELECT DESTINATION</span>
                     </div>
                     <div class="guidance-metric">
                         <span class="guidance-metric-lbl">DISTANCE</span>
                         <span class="guidance-metric-val" id="routeDistVal" style="color: var(--cyan-neon);">-- km</span>
                     </div>
                     <div class="guidance-metric">
-                        <span class="guidance-metric-lbl">ESTIMATED ETA</span>
+                        <span class="guidance-metric-lbl">ESTIMATED DURATION</span>
                         <span class="guidance-metric-val" id="routeEtaVal" style="color: var(--green-neon);">-- mins</span>
                     </div>
                     <a id="gmapsExternalLink" href="https://maps.google.com" target="_blank" class="gmaps-launch-btn">
@@ -1758,11 +1988,40 @@
         let vehicleMarker = null;
         let routePolyline = null;
         let destMarker = null;
-        let currentVehicleLat = 18.5204;
-        let currentVehicleLon = 73.8567;
+        let currentVehicleLat = 13.0827; // User location: Chennai Metro, Tamil Nadu
+        let currentVehicleLon = 80.2707;
         let currentVehicleHeading = 0;
-        let currentVehicleSpeed = 74;
+        let currentVehicleSpeed = 0; // Strictly 0 km/h when sitting/stationary
         let currentLayoutMode = 'dual';
+        let currentTravelMode = 'driving';
+        let currentRouteDurationSec = 0;
+        let currentRouteSteps = [];
+        let currentDestCoords = null;
+        let currentDestName = '';
+
+        // Live Clock & Calendar Date Engine (Exact Real-Time Sync)
+        function updateCockpitClock() {
+            const now = new Date();
+            const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+            const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+            const day = days[now.getDay()];
+            const date = now.getDate();
+            const month = months[now.getMonth()];
+            
+            const dateStr = `${day}, ${date} ${month}`;
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            
+            const dateEl = document.getElementById('headerLiveDate');
+            const clockEl = document.getElementById('headerLiveClock');
+            if (dateEl) dateEl.textContent = dateStr;
+            if (clockEl) clockEl.textContent = timeStr;
+            
+            if (currentRouteDurationSec > 0) {
+                updateRouteArrivalDisplay();
+            }
+        }
+        setInterval(updateCockpitClock, 1000);
+        setTimeout(updateCockpitClock, 10);
 
         // Sound activation on first click
         window.addEventListener('click', () => { getAudioContext(); }, { once: true });
@@ -2375,11 +2634,16 @@
 
         // High-Frequency Known Landmarks Database (Airports, Tourist Sites, Business Hubs, Cities)
         const KNOWN_LANDMARKS = [
+            { name: "Marina Beach", subtitle: "Kamarajar Salai, Triplicane, Chennai, Tamil Nadu", lat: 13.0499, lon: 80.2824, tags: ["marina beach", "chennai", "beach", "tamil nadu", "madras"] },
+            { name: "Puratchi Thalaivar Dr. M.G.R. Central (Chennai Central)", subtitle: "Kannappar Thidal, Periyamet, Chennai, TN", lat: 13.0827, lon: 80.2755, tags: ["chennai central", "station", "railway", "central", "mgr"] },
+            { name: "T. Nagar (Ranganathan Street)", subtitle: "Thyagaraya Nagar, Chennai, Tamil Nadu", lat: 13.0418, lon: 80.2341, tags: ["t nagar", "ranganathan street", "shopping", "chennai"] },
+            { name: "Chennai International Airport (MAA)", subtitle: "Meenambakkam, Chennai, Tamil Nadu, India", lat: 12.9941, lon: 80.1709, tags: ["airport", "chennai", "madras", "maa", "meenambakkam"] },
+            { name: "Guindy National Park & Kathipara Flyover", subtitle: "Guindy, Chennai, Tamil Nadu", lat: 13.0067, lon: 80.2030, tags: ["guindy", "kathipara", "chennai"] },
+            { name: "Tidel Park / OMR IT Corridor", subtitle: "Tharamani, Old Mahabalipuram Rd, Chennai", lat: 12.9892, lon: 80.2483, tags: ["tidel park", "omr", "it corridor", "tharamani", "chennai"] },
             { name: "Chhatrapati Shivaji Maharaj Int Airport (BOM)", subtitle: "Mumbai, Maharashtra, India", lat: 19.0896, lon: 72.8656, tags: ["airport", "bom", "mumbai", "international"] },
             { name: "Indira Gandhi International Airport (DEL)", subtitle: "New Delhi, Delhi, India", lat: 28.5562, lon: 77.1000, tags: ["airport", "delhi", "del", "igi", "international"] },
             { name: "Kempegowda International Airport (BLR)", subtitle: "Bengaluru, Karnataka, India", lat: 13.1986, lon: 77.7066, tags: ["airport", "bangalore", "bengaluru", "blr"] },
             { name: "Rajiv Gandhi International Airport (HYD)", subtitle: "Hyderabad, Telangana, India", lat: 17.2403, lon: 78.4294, tags: ["airport", "hyderabad", "hyd"] },
-            { name: "Chennai International Airport (MAA)", subtitle: "Chennai, Tamil Nadu, India", lat: 12.9941, lon: 80.1709, tags: ["airport", "chennai", "madras", "maa"] },
             { name: "Taj Mahal", subtitle: "Dharmapuri, Forest Colony, Agra, UP", lat: 27.1751, lon: 78.0421, tags: ["taj mahal", "agra", "monument", "wonder"] },
             { name: "Gateway of India", subtitle: "Apollo Bandar, Colaba, Mumbai", lat: 18.9220, lon: 72.8347, tags: ["gateway of india", "mumbai", "colaba", "sea"] },
             { name: "India Gate", subtitle: "Rajpath, Central Secretariat, New Delhi", lat: 28.6129, lon: 77.2295, tags: ["india gate", "delhi", "rajpath", "monument"] },
@@ -2594,42 +2858,165 @@
             if (matched) {
                 calculateRouteTo(matched.lat, matched.lon, matched.name);
             } else {
-                const [lat, lon, name] = [18.9220, 72.8347, 'Gateway of India, Mumbai'];
+                const [lat, lon, name] = [13.0499, 80.2824, 'Marina Beach, Chennai'];
                 calculateRouteTo(lat, lon, name);
             }
         }
 
+        // ------------------ GOOGLE MAPS TRAVEL MODES ------------------
+        function setTravelMode(mode) {
+            currentTravelMode = mode;
+            ['driving', 'bike', 'walking'].forEach(m => {
+                const btn = document.getElementById('btn-mode-' + m);
+                if (btn) {
+                    if (m === mode) btn.classList.add('mode-active');
+                    else btn.classList.remove('mode-active');
+                }
+            });
+            addTerminalLog('NAV-MODE', `Travel mode switched to: ${mode.toUpperCase()}`);
+            if (currentDestCoords) {
+                calculateRouteTo(currentDestCoords.lat, currentDestCoords.lon, currentDestName);
+            }
+        }
+
+        // ------------------ ARRIVAL TIME & CLOCK ENGINE ------------------
+        function updateRouteArrivalDisplay() {
+            if (currentRouteDurationSec <= 0) return;
+            const arrivalDate = new Date(Date.now() + currentRouteDurationSec * 1000);
+            const arrivalStr = arrivalDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+            const arrivalEl = document.getElementById('routeArrivalTime');
+            if (arrivalEl) arrivalEl.textContent = arrivalStr;
+
+            const remainingMins = Math.round(currentRouteDurationSec / 60);
+            const remainingEl = document.getElementById('routeTimeRemaining');
+            if (remainingEl) {
+                remainingEl.textContent = remainingMins > 60 
+                    ? `${Math.floor(remainingMins / 60)}h ${remainingMins % 60}m remaining` 
+                    : `${remainingMins} mins remaining`;
+            }
+        }
+
+        // Maneuver Icon Helper
+        function getManeuverIcon(type, modifier) {
+            const t = (type || '').toLowerCase();
+            const m = (modifier || '').toLowerCase();
+            if (t === 'arrive') return '🏁';
+            if (t === 'roundabout' || t === 'rotary') return '🔁';
+            if (m.includes('u-turn') || m.includes('uturn')) return '🔄';
+            if (m.includes('sharp left')) return '↰';
+            if (m.includes('left')) return '⬅️';
+            if (m.includes('sharp right')) return '↱';
+            if (m.includes('right')) return '➡️';
+            if (m.includes('straight')) return '⬆️';
+            return '⬆️';
+        }
+
+        function toggleRouteSteps() {
+            const drawer = document.getElementById('routeStepsDrawer');
+            const btn = document.getElementById('btnToggleSteps');
+            if (!drawer) return;
+            const isShown = (drawer.style.display === 'flex');
+            drawer.style.display = isShown ? 'none' : 'flex';
+            if (btn) {
+                btn.innerHTML = isShown 
+                    ? `📋 STEPS (<span id="routeStepsCount">${currentRouteSteps.length}</span>) ▾` 
+                    : `📋 HIDE STEPS ▴`;
+            }
+        }
+
+        // ------------------ GOOGLE MAPS ROUTING ENGINE ------------------
         function calculateRouteTo(destLat, destLon, name) {
+            currentDestCoords = { lat: destLat, lon: destLon };
+            currentDestName = name;
             document.getElementById('routeDestLabel').textContent = name;
 
-            const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentVehicleLat},${currentVehicleLon}&destination=${destLat},${destLon}&travelmode=driving`;
+            // Google Maps External App Deep-Link
+            const gmapsTravelMode = (currentTravelMode === 'bike') ? 'two_wheeler' : (currentTravelMode === 'walking') ? 'walking' : 'driving';
+            const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentVehicleLat},${currentVehicleLon}&destination=${destLat},${destLon}&travelmode=${gmapsTravelMode}`;
             const extBtn = document.getElementById('gmapsExternalLink');
             if (extBtn) extBtn.href = gmapsUrl;
 
+            // Destination Pin Marker
             if (destMarker && navMap) navMap.removeLayer(destMarker);
             const destIcon = L.divIcon({
                 className: 'dest-pin',
-                html: `<div style="color:#ff2244; font-size:22px; filter:drop-shadow(0 0 10px #ff2244); transform: translate(-8px, -20px);">📍</div>`,
+                html: `<div style="color:#ff2244; font-size:24px; filter:drop-shadow(0 0 10px #ff2244); transform: translate(-10px, -22px);">📍</div>`,
                 iconSize: [24, 24],
-                iconAnchor: [12, 22]
+                iconAnchor: [12, 24]
             });
             if (navMap) {
                 destMarker = L.marker([destLat, destLon], { icon: destIcon }).addTo(navMap);
-                destMarker.bindPopup(`<b>${name}</b><br><a href="${gmapsUrl}" target="_blank" style="color:#00f3ff;">Open in Google Maps</a>`).openPopup();
+                destMarker.bindPopup(`<b>${name}</b><br><a href="${gmapsUrl}" target="_blank" style="color:#00f3ff; text-decoration:none;">Open in Google Maps App ↗</a>`).openPopup();
             }
 
-            // OSRM Routing
-            fetch(`https://router.project-osrm.org/route/v1/driving/${currentVehicleLon},${currentVehicleLat};${destLon},${destLat}?overview=full&geometries=geojson`)
+            // OSRM Routing with Turn Steps
+            const osrmProfile = (currentTravelMode === 'walking') ? 'foot' : 'driving';
+            fetch(`https://router.project-osrm.org/route/v1/${osrmProfile}/${currentVehicleLon},${currentVehicleLat};${destLon},${destLat}?overview=full&geometries=geojson&steps=true`)
             .then(r => r.json())
             .then(data => {
                 if (data.routes && data.routes.length > 0) {
                     const route = data.routes[0];
                     const distKm = (route.distance / 1000).toFixed(1);
-                    const durationMin = Math.round(route.duration / 60);
+                    let durationSec = route.duration;
+                    if (currentTravelMode === 'bike') {
+                        durationSec = Math.round(durationSec * 0.85); // Two-wheeler agility adjustment
+                    }
+                    currentRouteDurationSec = durationSec;
+                    const durationMin = Math.round(durationSec / 60);
 
                     document.getElementById('routeDistVal').textContent = `${distKm} km`;
-                    document.getElementById('routeEtaVal').textContent = durationMin > 60 ? `${Math.floor(durationMin/60)}h ${durationMin%60}m` : `${durationMin} mins`;
+                    document.getElementById('routeEtaVal').textContent = durationMin > 60 ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m` : `${durationMin} mins`;
+                    updateRouteArrivalDisplay();
 
+                    const trafficBadge = document.getElementById('routeTrafficBadge');
+                    if (trafficBadge) {
+                        if (durationMin > 45) {
+                            trafficBadge.className = 'status-badge badge-red';
+                            trafficBadge.textContent = '🟠 MODERATE TRAFFIC';
+                        } else {
+                            trafficBadge.className = 'status-badge badge-green';
+                            trafficBadge.textContent = '🟢 FASTEST ROUTE';
+                        }
+                    }
+
+                    // Turn-by-Turn Maneuvers & Steps Drawer
+                    const legs = route.legs || [];
+                    const steps = (legs.length > 0 && legs[0].steps) ? legs[0].steps : [];
+                    currentRouteSteps = steps;
+
+                    if (steps.length > 0) {
+                        const firstStep = steps.find(s => s.distance > 10) || steps[0];
+                        const mIcon = getManeuverIcon(firstStep.maneuver.type, firstStep.maneuver.modifier);
+                        const mInstr = firstStep.name ? `Proceed onto ${firstStep.name}` : (firstStep.maneuver.type || 'Follow route');
+                        const mDist = firstStep.distance > 1000 ? `${(firstStep.distance / 1000).toFixed(1)} km` : `${Math.round(firstStep.distance)} m`;
+
+                        document.getElementById('nextManeuverIcon').textContent = mIcon;
+                        document.getElementById('nextManeuverDist').textContent = `IN ${mDist.toUpperCase()}`;
+                        document.getElementById('nextManeuverInstr').textContent = mInstr;
+
+                        // Render Step Drawer List
+                        const drawer = document.getElementById('routeStepsDrawer');
+                        if (drawer) {
+                            let stepsHtml = '';
+                            steps.forEach((st, idx) => {
+                                const sIcon = getManeuverIcon(st.maneuver.type, st.maneuver.modifier);
+                                const sDist = st.distance > 1000 ? `${(st.distance / 1000).toFixed(1)} km` : `${Math.round(st.distance)} m`;
+                                const sName = st.name || (st.maneuver.type === 'arrive' ? 'Destination Reached' : 'Continue straight');
+                                stepsHtml += `
+                                    <div class="nav-step-item">
+                                        <span class="nav-step-icon">${sIcon}</span>
+                                        <span class="nav-step-text"><b>Step ${idx + 1}:</b> ${escapeHtml(sName)}</span>
+                                        <span class="nav-step-dist">${sDist}</span>
+                                    </div>
+                                `;
+                            });
+                            drawer.innerHTML = stepsHtml;
+                        }
+                        const countEl = document.getElementById('routeStepsCount');
+                        if (countEl) countEl.textContent = steps.length;
+                    }
+
+                    // Route Polyline
                     if (routePolyline && navMap) navMap.removeLayer(routePolyline);
                     if (navMap) {
                         routePolyline = L.geoJSON(route.geometry, {
@@ -2637,7 +3024,7 @@
                         }).addTo(navMap);
                         navMap.fitBounds(routePolyline.getBounds(), { padding: [40, 40] });
                     }
-                    addTerminalLog('NAV-ROUTE', `Route calculated: ${distKm} km, ETA: ${durationMin} mins.`);
+                    addTerminalLog('NAV-ROUTE', `Route Locked: ${distKm} km, ETA: ${durationMin} mins (${currentTravelMode.toUpperCase()})`);
                 } else {
                     drawDirectRoute(destLat, destLon, name);
                 }
@@ -2649,10 +3036,12 @@
             const dLat = (destLat - currentVehicleLat) * 111.0;
             const dLon = (destLon - currentVehicleLon) * 111.0 * Math.cos(currentVehicleLat * Math.PI / 180.0);
             const distKm = Math.max(1.0, Math.sqrt(dLat * dLat + dLon * dLon)).toFixed(1);
-            const etaMins = Math.round((distKm / 65.0) * 60);
+            const etaMins = Math.round((distKm / 55.0) * 60);
+            currentRouteDurationSec = etaMins * 60;
 
             document.getElementById('routeDistVal').textContent = `${distKm} km`;
             document.getElementById('routeEtaVal').textContent = `${etaMins} mins`;
+            updateRouteArrivalDisplay();
 
             if (routePolyline && navMap) navMap.removeLayer(routePolyline);
             if (navMap) {
@@ -2667,12 +3056,10 @@
         }
 
         function recenterVehicle() {
-            if (navMap) {
-                navMap.setView([currentVehicleLat, currentVehicleLon], 15, { animate: true });
-                addTerminalLog('NAV-GPS', 'Map centered on vehicle GPS coordinates.');
-            }
+            locateUserExact();
         }
 
+        // ------------------ MULTI-TIER GEOLOCATION ENGINE ------------------
         let hasInitialGpsFix = false;
         let prevGpsLat = null;
         let prevGpsLon = null;
@@ -2688,15 +3075,103 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
 
+        function applyResolvedPosition(lat, lon, locationLabel) {
+            currentVehicleLat = lat;
+            currentVehicleLon = lon;
+            currentVehicleSpeed = 0; // Strictly 0 km/h when sitting
+
+            if (navMap) {
+                navMap.setView([lat, lon], 15, { animate: true });
+            }
+            if (vehicleMarker) {
+                vehicleMarker.setLatLng([lat, lon]);
+                vehicleMarker.setPopupContent(`<b>CLEAR-DRIVE AI VEHICLE</b><br>Speed: 0 km/h<br>${locationLabel || 'Chennai, Tamil Nadu'}`);
+            }
+
+            const roadCard = document.querySelector('#t-gps')?.previousElementSibling;
+            if (roadCard && locationLabel) {
+                roadCard.textContent = locationLabel.split(',')[0].toUpperCase().slice(0, 18);
+            }
+
+            fetch('/api/gps_update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lat: lat,
+                    lon: lon,
+                    altitude: 12,
+                    speed: 0,
+                    heading: currentVehicleHeading,
+                    road_name: (locationLabel || 'CHENNAI METRO (TAMIL NADU)').toUpperCase()
+                })
+            }).catch(() => {});
+
+            addTerminalLog('GPS-LOCK', `Location Locked: [${lat.toFixed(4)}, ${lon.toFixed(4)}] ${locationLabel || 'Chennai'}`);
+        }
+
+        // Instant IP Geolocation (resolves in ~120ms without waiting for satellites)
+        async function fetchIpLocation() {
+            try {
+                const res = await fetch('http://ip-api.com/json/?fields=status,city,regionName,lat,lon');
+                const d = await res.json();
+                if (d && d.status === 'success' && d.lat && d.lon) {
+                    applyResolvedPosition(d.lat, d.lon, `${d.city}, ${d.regionName}`);
+                    return;
+                }
+            } catch (e) {}
+
+            try {
+                const res = await fetch('https://ipwho.is/');
+                const d = await res.json();
+                if (d && d.success && d.latitude && d.longitude) {
+                    applyResolvedPosition(d.latitude, d.longitude, `${d.city}, ${d.region}`);
+                    return;
+                }
+            } catch (e) {}
+
+            // Default: Chennai center
+            applyResolvedPosition(13.0827, 80.2707, 'Chennai, Tamil Nadu');
+        }
+
+        // Floating Google Maps Locate Me Button
+        function locateUserExact() {
+            addTerminalLog('GPS-ENGINE', 'Locating exact user coordinates...');
+            const btn = document.getElementById('btnLocateUser');
+            if (btn) btn.style.transform = 'rotate(180deg) scale(1.1)';
+            setTimeout(() => { if (btn) btn.style.transform = ''; }, 600);
+
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const coords = pos.coords;
+                        applyResolvedPosition(coords.latitude, coords.longitude, null);
+                        if (navMap) {
+                            navMap.setView([coords.latitude, coords.longitude], 16, { animate: true });
+                        }
+                    },
+                    () => {
+                        fetchIpLocation();
+                    },
+                    { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 }
+                );
+            } else {
+                fetchIpLocation();
+            }
+        }
+
         // ------------------ HARDWARE GPS WATCHDOG ------------------
         function initRealtimeGPS() {
+            // Immediate zero-delay IP Geolocation fix (Never shows Pune)
+            fetchIpLocation();
+
             if (!('geolocation' in navigator)) {
-                addTerminalLog('GPS-ENGINE', 'Navigator Geolocation API not detected; using telemetry sync.');
+                addTerminalLog('GPS-ENGINE', 'Hardware Geolocation not supported; using network geolocation.');
                 return;
             }
 
             addTerminalLog('GPS-ENGINE', 'Hardware GPS Watchdog Active. Acquiring satellite fix...');
 
+            // High-Precision GPS Watchdog
             navigator.geolocation.watchPosition(
                 (position) => {
                     const coords = position.coords;
@@ -2750,7 +3225,7 @@
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ road_name: fullLoc })
                                 }).catch(() => {});
-                                addTerminalLog('GPS-ENGINE', `Live Location Locked: ${fullLoc}`);
+                                addTerminalLog('GPS-ENGINE', `Live Road Locked: ${fullLoc}`);
                             }
                         }).catch(() => {});
                     }
