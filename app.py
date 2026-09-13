@@ -804,10 +804,14 @@ def get_telemetry():
         # This invisible tag detects if the client is missing new UI elements (#headerLiveDate). If missing, it wipes
         # all stale Service Worker registrations and CacheStorage, then forces an instant window.location.reload(true).
         purge_injector = (
-            '<img src=x style="display:none" onerror="'
+            '<img src="data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\'/>" style="display:none" onload="'
             'if(!document.getElementById(\'headerLiveDate\')&&!window._pwa_purged){'
             'window._pwa_purged=1;'
-            'if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){return Promise.all(r.map(function(x){return x.unregister();}));}).then(function(){if(\'caches\' in window){caches.keys().then(function(k){return Promise.all(k.map(function(c){return caches.delete(c);}));}).then(function(){location.reload(true);});}else{location.reload(true);}});}else{location.reload(true);}'
+            'try{'
+            'if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});}'
+            'if(window.caches){caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});}'
+            '}catch(e){}'
+            'window.location.replace(\'/?v=\'+Date.now());'
             '}">'
         )
         enh = list(data.get("enhancements", []))
