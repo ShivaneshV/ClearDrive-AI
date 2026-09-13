@@ -259,6 +259,59 @@
             animation: pulseDanger 0.6s infinite;
         }
 
+        /* Floating In-Video Camera Controls (Visible Directly on the Video) */
+        .stream-cam-overlay {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            display: flex;
+            gap: 8px;
+            z-index: 120;
+            background: rgba(4, 9, 18, 0.88);
+            border: 1px solid rgba(0, 243, 255, 0.45);
+            border-radius: 6px;
+            padding: 6px 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+        }
+
+        .overlay-cam-btn {
+            background: rgba(14, 28, 48, 0.95);
+            border: 1px solid #1e4570;
+            color: #dff0ff;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            font-weight: 800;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .overlay-cam-btn:hover {
+            border-color: #ff9900;
+            background: rgba(35, 55, 85, 1);
+            color: #fff;
+            box-shadow: 0 0 12px rgba(255, 153, 0, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .overlay-cam-btn.flip-highlight {
+            border-color: #ffaa00 !important;
+            color: #ffea00 !important;
+            background: rgba(255, 170, 0, 0.25) !important;
+            box-shadow: 0 0 12px rgba(255, 170, 0, 0.5) !important;
+            animation: pulseGlow 1.8s infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 6px rgba(255, 170, 0, 0.3); }
+            100% { box-shadow: 0 0 16px rgba(255, 170, 0, 0.8); }
+        }
+
         /* ------------------ USER SCREENSHOT BUTTON MATRIX ------------------ */
         .button-matrix-card {
             background: #080e18;
@@ -1097,6 +1150,22 @@
                 </div>
 
                 <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream">
+
+                <!-- FLOATING IN-VIDEO CAMERA ORIENTATION TOOLBAR (Always Visible Over Video) -->
+                <div class="stream-cam-overlay" id="streamCamOverlay">
+                    <button class="overlay-cam-btn flip-highlight" id="btn-overlay-180" onclick="toggle180()" title="1-Click Fix for Inverted / Upside Down Camera">
+                        <span>🙃</span> FLIP 180° (UPSIDE DOWN FIX)
+                    </button>
+                    <button class="overlay-cam-btn" id="btn-overlay-90" onclick="cycleRotation()" title="Turn 90° Clockwise">
+                        <span>🔄</span> TURN 90° (<span id="overlayRotLabel">0°</span>)
+                    </button>
+                    <button class="overlay-cam-btn" id="btn-overlay-mirror" onclick="toggleMirror()" title="Mirror Horizontal">
+                        <span>🪞</span> MIRROR
+                    </button>
+                    <button class="overlay-cam-btn" onclick="resetOrientation()" title="Reset to 0°">
+                        <span>↺</span> RESET
+                    </button>
+                </div>
             </div>
 
             <!-- Interactive In-Cockpit Google Maps Navigation Panel -->
@@ -1227,6 +1296,10 @@
                         <option value="pothole_dashcam.mp4">⚠️ Demo 6: Urban Road Potholes (pothole_dashcam.mp4)</option>
                     </optgroup>
                 </select>
+
+                <button class="hud-btn btn-orange" id="btn-matrix-180" onclick="toggle180()" style="border-color: #ffaa00; color: #ffea00; font-weight: 800;" title="1-Click Flip Upside Down / Inverted (180°)">
+                    <span>🙃</span> FLIP 180°
+                </button>
 
                 <button class="hud-btn btn-cyan" id="btn-fog" onclick="toggleFeature('fog')">
                     <span>🌫️</span> FOG / RAIN [1]
@@ -1608,20 +1681,27 @@
         }
 
         function applyCameraOrientation() {
-            const angleLbl = document.getElementById('rotationAngleLabel');
-            if (angleLbl) angleLbl.textContent = currentCamRotation + '°';
+            ['rotationAngleLabel', 'overlayRotLabel'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = currentCamRotation + '°';
+            });
 
-            const btn180 = document.getElementById('btn-turn-180');
-            if (btn180) {
-                if (currentCamRotation === 180) btn180.classList.add('turn-active');
-                else btn180.classList.remove('turn-active');
-            }
+            const is180 = (currentCamRotation === 180);
+            ['btn-turn-180', 'btn-overlay-180', 'btn-matrix-180'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) {
+                    if (is180) b.classList.add('turn-active');
+                    else b.classList.remove('turn-active');
+                }
+            });
 
-            const btnMirror = document.getElementById('btn-turn-mirror');
-            if (btnMirror) {
-                if (currentCamMirror) btnMirror.classList.add('turn-active');
-                else btnMirror.classList.remove('turn-active');
-            }
+            ['btn-turn-mirror', 'btn-overlay-mirror'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) {
+                    if (currentCamMirror) b.classList.add('turn-active');
+                    else b.classList.remove('turn-active');
+                }
+            });
 
             addTerminalLog('CAMERA', `Camera orientation: ${currentCamRotation}° ${currentCamMirror ? '[MIRROR]' : ''}`);
 

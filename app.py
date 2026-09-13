@@ -696,6 +696,15 @@ def api_version():
     })
 
 
+@app.after_request
+def add_no_cache_headers(response):
+    """Guarantees browser and Cloudflare edge never cache stale HTML or JS."""
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 @app.route('/')
 def index():
     """Renders the cockpit UI."""
