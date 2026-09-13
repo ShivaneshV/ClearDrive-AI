@@ -67,15 +67,11 @@ PLAYLIST = [
 
 FALLBACK_MAP = {
     'traffic_dashcam.mp4': 'foggy_dashcam.mp4',
-    'foggy_dashcam.mp4': 'fog.mp4',
-    'fog.mp4': 'foggy_dashcam.mp4',
-    'indian_rain.mp4': 'rain.mp4',
-    'rain.mp4': 'indian_rain.mp4',
-    'night_dashcam.mp4': 'night.mp4',
-    'night.mp4': 'night_dashcam.mp4',
-    'glare_dashcam.mp4': 'snow.mp4',
-    'snow.mp4': 'glare_dashcam.mp4',
-    'pothole_dashcam.mp4': 'indian_rain.mp4'
+    'foggy_dashcam.mp4': 'indian_rain.mp4',
+    'indian_rain.mp4': 'night_dashcam.mp4',
+    'night_dashcam.mp4': 'glare_dashcam.mp4',
+    'glare_dashcam.mp4': 'pothole_dashcam.mp4',
+    'pothole_dashcam.mp4': 'traffic_dashcam.mp4'
 }
 
 # V2V Mesh Network Simulated Payloads (Beyond-Line-of-Sight Threats)

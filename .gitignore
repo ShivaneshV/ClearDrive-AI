@@ -13,10 +13,13 @@ Screen Recording *.mp4
 *.mov
 *.mkv
 
-# Duplicate video copies (keep canonical *_dashcam.mp4)
+# Duplicate & unused video copies (keep canonical 6 playlist videos)
 fog.mp4
 night.mp4
 rain.mp4
+indian_fog.mp4
+rain_dashcam.mp4
+snow.mp4
 
 # Local packaging duplicate folder
 ClearDrive_AI/
