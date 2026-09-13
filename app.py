@@ -328,16 +328,10 @@ def process_video():
     while True:
         now = time.time()
 
-        # Autonomous V2V Mesh Simulator: triggers every 22s for 6s
+        # V2V Mesh Simulator: clear after timeout (no automatic random popups)
         if active_v2v_payload is not None:
             if now - v2v_timer_start > 6.0:
                 active_v2v_payload = None
-        else:
-            if now - last_v2v_trigger_time > 20.0:
-                active_v2v_payload = V2V_PAYLOADS[v2v_cycle_index % len(V2V_PAYLOADS)]
-                v2v_cycle_index += 1
-                v2v_timer_start = now
-                last_v2v_trigger_time = now
 
         if source_changed:
             with lock:
@@ -525,6 +519,9 @@ def process_video():
                     "speed_limit": 80,
                     "overspeed": False,
                     "climate_profile": "STANDBY",
+                    "current_lane": "CENTER LANE",
+                    "lane_direction": "center",
+                    "lane_arrow": "●",
                     "gps_lat": round(active_lat, 5),
                     "gps_lon": round(active_lon, 5),
                     "gps_speed": active_gps_speed,
@@ -611,6 +608,9 @@ def process_video():
                 "speed_limit": tele["speed_limit"],
                 "overspeed": tele["overspeed"],
                 "climate_profile": tele["climate_profile"],
+                "current_lane": tele.get("current_lane", "CENTER LANE"),
+                "lane_direction": tele.get("lane_direction", "center"),
+                "lane_arrow": tele.get("lane_arrow", "●"),
                 "gps_lat": round(active_lat, 5),
                 "gps_lon": round(active_lon, 5),
                 "gps_speed": active_gps_speed,

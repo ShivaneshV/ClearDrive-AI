@@ -1311,23 +1311,8 @@
         }
 
         function playSiren() {
-            try {
-                const ctx = getAudioContext();
-                if (sirenOsc) return;
-                sirenOsc = ctx.createOscillator();
-                sirenGain = ctx.createGain();
-                sirenOsc.type = 'sawtooth';
-                sirenGain.gain.setValueAtTime(0.08, ctx.currentTime);
-
-                const now = ctx.currentTime;
-                sirenOsc.frequency.setValueAtTime(650, now);
-                sirenOsc.frequency.linearRampToValueAtTime(950, now + 0.18);
-                sirenOsc.frequency.linearRampToValueAtTime(650, now + 0.36);
-
-                sirenOsc.connect(sirenGain);
-                sirenGain.connect(ctx.destination);
-                sirenOsc.start();
-            } catch (e) {}
+            // Non-speed alerts suppressed
+            return;
         }
 
         function stopSiren() {
@@ -1420,9 +1405,9 @@
                 <div id="t-ttc" class="tele-sub">TTC: --</div>
             </div>
             <div class="tele-card">
-                <div class="tele-label">TARGETS TRACKED</div>
-                <div id="t-vehicles" class="tele-value">0</div>
-                <div class="tele-sub">YOLOv8 VRU RADAR</div>
+                <div class="tele-label">LANE POSITION</div>
+                <div id="t-lane-pos" class="tele-value val-good">CENTER LANE ●</div>
+                <div id="t-lane-sub" class="tele-sub">AR REAL-TIME TRACKING</div>
             </div>
             <div class="tele-card">
                 <div class="tele-label">ROAD POTHOLES</div>
@@ -1431,8 +1416,8 @@
             </div>
             <div class="tele-card">
                 <div class="tele-label">GPS ROAD NODE</div>
-                <div class="tele-value" style="font-size: 0.95rem;">NH-48 EXPRESS</div>
-                <div id="t-gps" class="tele-sub">18.5204° N, 73.8567° E</div>
+                <div class="tele-value" style="font-size: 0.95rem;">LIVE LOCATION</div>
+                <div id="t-gps" class="tele-sub">ACQUIRING FIX...</div>
             </div>
         </div>
 
@@ -1443,14 +1428,14 @@
                 <!-- Flashing Over-Speed Warning Banner -->
                 <div class="overspeed-banner" id="overspeedBanner">
                     <span>🚨</span>
-                    <span id="overspeedText">OVER-SPEED WARNING: 78 km/h EXCEEDS SAFE LIMIT (60 km/h)</span>
+                    <span id="overspeedText">OVER-SPEED WARNING: EXCEEDS 80 km/h LIMIT</span>
                 </div>
 
-                <!-- Flashing Autonomous Emergency Brake Banner -->
-                <div class="aeb-banner" id="autobrakeBanner">
+                <!-- Collision / AEB Banner: Permanently Suppressed -->
+                <div class="aeb-banner" id="autobrakeBanner" style="display: none !important;">
                     <span>⚠️</span>
-                    <span>COLLISION IMMINENT // AUTONOMOUS EMERGENCY BRAKE PRE-ARMED</span>
-                    <span id="bannerTtc" style="color: #ffea00;">TTC: 0.8s</span>
+                    <span>COLLISION IMMINENT</span>
+                    <span id="bannerTtc" style="color: #ffea00;">TTC: --</span>
                 </div>
 
                 <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream">
@@ -1487,6 +1472,7 @@
                         <button class="nav-layer-btn" id="btn-layer-sat" onclick="switchMapLayer('satellite')">🛰️ SATELLITE</button>
                         <button class="nav-layer-btn" id="btn-layer-traffic" onclick="switchMapLayer('traffic')">🚦 TRAFFIC</button>
                         <button class="nav-layer-btn" id="btn-layer-road" onclick="switchMapLayer('roadmap')">🗺️ ROAD</button>
+                        <button class="nav-layer-btn" id="btn-layer-terrain" onclick="switchMapLayer('terrain')">⛰️ TERRAIN</button>
                         <button class="nav-layer-btn layer-active" id="btn-layer-dark" onclick="switchMapLayer('dark')">🕶️ CYBER</button>
                     </div>
                 </div>
@@ -2311,6 +2297,7 @@
                 mapLayers.satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
                 mapLayers.traffic = L.tileLayer('https://mt1.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}', { maxZoom: 20 });
                 mapLayers.roadmap = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20 });
+                mapLayers.terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { maxZoom: 20 });
 
                 mapLayers.dark.addTo(navMap);
 
@@ -2330,10 +2317,27 @@
                 vehicleMarker = L.marker([currentVehicleLat, currentVehicleLon], { icon: vehicleIcon }).addTo(navMap);
                 vehicleMarker.bindPopup("<b>CLEAR-DRIVE AI VEHICLE</b><br>Speed: " + currentVehicleSpeed + " km/h");
 
-                // Default initial route
-                calculateRouteTo(18.7557, 73.4091, "Lonavala Ghat (NH-48 Expressway)");
+                // Click/Tap anywhere on map to navigate directly (Google Maps click-to-navigate)
+                navMap.on('click', function(e) {
+                    const destLat = e.latlng.lat;
+                    const destLon = e.latlng.lng;
+                    addTerminalLog('NAV-MAP', `Pin placed at [${destLat.toFixed(4)}, ${destLon.toFixed(4)}]. Calculating route...`);
+                    
+                    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${destLat}&lon=${destLon}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        const locName = (data && data.display_name) 
+                            ? data.display_name.split(',').slice(0, 2).join(',') 
+                            : `Destination (${destLat.toFixed(4)}, ${destLon.toFixed(4)})`;
+                        document.getElementById('destSearchInput').value = locName;
+                        calculateRouteTo(destLat, destLon, locName);
+                    })
+                    .catch(() => {
+                        calculateRouteTo(destLat, destLon, `Destination (${destLat.toFixed(4)}, ${destLon.toFixed(4)})`);
+                    });
+                });
 
-                addTerminalLog('NAV-SYSTEM', 'Google Maps & OSRM Routing Engine Online.');
+                addTerminalLog('NAV-SYSTEM', 'Google Maps Navigation & Routing Engine Online.');
             } catch (err) {
                 console.warn("Map init notice:", err);
             }
@@ -2345,6 +2349,7 @@
                 'satellite': 'btn-layer-sat',
                 'traffic': 'btn-layer-traffic',
                 'roadmap': 'btn-layer-road',
+                'terrain': 'btn-layer-terrain',
                 'dark': 'btn-layer-dark'
             };
             Object.values(btnMap).forEach(id => {
@@ -2668,6 +2673,21 @@
             }
         }
 
+        let hasInitialGpsFix = false;
+        let prevGpsLat = null;
+        let prevGpsLon = null;
+        let prevGpsTime = null;
+
+        function calcDistanceMeters(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
         // ------------------ HARDWARE GPS WATCHDOG ------------------
         function initRealtimeGPS() {
             if (!('geolocation' in navigator)) {
@@ -2680,19 +2700,62 @@
             navigator.geolocation.watchPosition(
                 (position) => {
                     const coords = position.coords;
+                    const now = Date.now();
                     currentVehicleLat = coords.latitude;
                     currentVehicleLon = coords.longitude;
-                    const alt = coords.altitude || 560;
+                    const alt = coords.altitude || 0;
                     const heading = coords.heading || 0;
                     currentVehicleHeading = heading;
 
-                    let liveSpeedKmh = null;
+                    // Real-time Speed Calculation (Google Maps style: stationary = 0 km/h)
+                    let liveSpeedKmh = 0;
                     if (coords.speed !== null && !isNaN(coords.speed) && coords.speed >= 0) {
-                        liveSpeedKmh = Math.round(coords.speed * 3.6);
-                        currentVehicleSpeed = liveSpeedKmh;
+                        // Browser gives speed in m/s: if < 0.5 m/s (~1.8 km/h), user is sitting/stationary -> strictly 0
+                        liveSpeedKmh = coords.speed < 0.5 ? 0 : Math.round(coords.speed * 3.6);
+                    } else if (prevGpsLat !== null && prevGpsLon !== null && prevGpsTime !== null) {
+                        const dt = (now - prevGpsTime) / 1000.0;
+                        if (dt >= 0.5) {
+                            const dMeters = calcDistanceMeters(prevGpsLat, prevGpsLon, currentVehicleLat, currentVehicleLon);
+                            // GPS jitter filter: < 2.5m displacement between updates is stationary jitter -> strictly 0 km/h
+                            if (dMeters < 2.5) {
+                                liveSpeedKmh = 0;
+                            } else {
+                                const spMs = dMeters / dt;
+                                liveSpeedKmh = spMs < 0.6 ? 0 : Math.round(spMs * 3.6);
+                            }
+                        }
                     }
 
-                    // Transmit to edge server
+                    prevGpsLat = currentVehicleLat;
+                    prevGpsLon = currentVehicleLon;
+                    prevGpsTime = now;
+                    currentVehicleSpeed = liveSpeedKmh;
+
+                    // On first satellite fix: center map directly on user's exact coordinates & reverse-geocode road
+                    if (!hasInitialGpsFix) {
+                        hasInitialGpsFix = true;
+                        if (navMap) {
+                            navMap.setView([currentVehicleLat, currentVehicleLon], 16, { animate: true });
+                        }
+                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${currentVehicleLat}&lon=${currentVehicleLon}`)
+                        .then(r => r.json())
+                        .then(d => {
+                            if (d && d.display_name) {
+                                const locRoad = d.address?.road || d.address?.suburb || d.address?.city || d.display_name.split(',')[0];
+                                const fullLoc = d.display_name.split(',').slice(0, 3).join(',');
+                                const roadCard = document.querySelector('#t-gps')?.previousElementSibling;
+                                if (roadCard) roadCard.textContent = (locRoad || "CURRENT LOCATION").toUpperCase().slice(0, 18);
+                                fetch('/api/gps_update', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ road_name: fullLoc })
+                                }).catch(() => {});
+                                addTerminalLog('GPS-ENGINE', `Live Location Locked: ${fullLoc}`);
+                            }
+                        }).catch(() => {});
+                    }
+
+                    // Transmit live GPS & speed to edge server (guarantees 0 km/h when sitting)
                     fetch('/api/gps_update', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -2708,6 +2771,7 @@
                     // Update Map Marker
                     if (vehicleMarker && navMap) {
                         vehicleMarker.setLatLng([currentVehicleLat, currentVehicleLon]);
+                        vehicleMarker.setPopupContent(`<b>CLEAR-DRIVE AI VEHICLE</b><br>Speed: ${liveSpeedKmh} km/h`);
                         const svg = document.getElementById('carSvgMarker');
                         if (svg) svg.style.transform = `rotate(${heading}deg)`;
                     }
@@ -2715,7 +2779,7 @@
                     const pill = document.getElementById('gpsStatusPill');
                     if (pill) {
                         pill.className = 'status-badge badge-green';
-                        pill.textContent = liveSpeedKmh !== null ? `GPS: ${liveSpeedKmh} KM/H` : 'GPS LOCKED';
+                        pill.textContent = `GPS: ${liveSpeedKmh} KM/H`;
                     }
                 },
                 (err) => {
@@ -2830,16 +2894,16 @@
                 latElem.textContent = `${data.latency_ms} ms LATENCY`;
                 latElem.className = (data.latency_ms > 45) ? 'tele-sub val-warn' : 'tele-sub val-good';
 
-                // Speedometer & Over-speed
+                // Speedometer & Over-speed (Speed limit strictly 80 km/h; ONLY alert permitted)
                 const spdElem = document.getElementById('t-speed');
                 spdElem.textContent = `${data.speed_kmh} km/h`;
-                document.getElementById('t-limit').textContent = `LIMIT: ${data.speed_limit} km/h`;
+                document.getElementById('t-limit').textContent = `LIMIT: 80 km/h`;
 
                 const overspeedBanner = document.getElementById('overspeedBanner');
-                if (data.overspeed) {
+                if (data.speed_kmh > 80) {
                     spdElem.className = 'tele-value val-danger';
                     overspeedBanner.style.display = 'flex';
-                    document.getElementById('overspeedText').textContent = `OVER-SPEED WARNING: ${data.speed_kmh} km/h EXCEEDS SAFE LIMIT (${data.speed_limit} km/h)`;
+                    document.getElementById('overspeedText').textContent = `OVER-SPEED WARNING: ${data.speed_kmh} km/h EXCEEDS SPEED LIMIT (80 km/h)`;
                     if (!lastOverspeedState) {
                         playChime();
                         lastOverspeedState = true;
@@ -2863,7 +2927,19 @@
                 }
 
                 document.getElementById('t-ttc').textContent = `TTC: ${data.ttc > 0 ? data.ttc + 's' : '--'}`;
-                document.getElementById('t-vehicles').textContent = data.vehicle_count || 0;
+                
+                // Real-time Lane Position (LEFT / CENTER / RIGHT LANE)
+                const laneElem = document.getElementById('t-lane-pos');
+                if (laneElem && data.current_lane) {
+                    const arrow = data.lane_arrow || (data.lane_direction === 'left' ? '◀' : data.lane_direction === 'right' ? '▶' : '●');
+                    laneElem.textContent = `${data.current_lane} ${arrow}`;
+                    if (data.lane_direction === 'left' || data.lane_direction === 'right') {
+                        laneElem.className = 'tele-value val-warn';
+                    } else {
+                        laneElem.className = 'tele-value val-good';
+                    }
+                }
+
                 document.getElementById('t-potholes').textContent = data.pothole_count || 0;
 
                 // GPS Road Node Telemetry Card
@@ -2885,16 +2961,10 @@
                     tractionBadge.textContent = 'HYDRO-GRIP: OPTIMAL';
                 }
 
-                // Autobrake AEB Banner
+                // Non-speed alerts suppressed: Autobrake banner and sirens kept off
                 const banner = document.getElementById('autobrakeBanner');
-                if (data.brake_alert) {
-                    banner.style.display = 'flex';
-                    document.getElementById('bannerTtc').textContent = `TTC: ${data.ttc}s`;
-                    playSiren();
-                } else {
-                    banner.style.display = 'none';
-                    stopSiren();
-                }
+                if (banner) banner.style.display = 'none';
+                stopSiren();
 
                 // V2V Terminal Events
                 if (data.v2v_active && data.v2v_event !== lastV2VEventStr) {

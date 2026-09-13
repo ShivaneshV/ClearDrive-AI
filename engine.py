@@ -323,24 +323,80 @@ class OmniVisionEngine:
         is_traction_hazard = force_traction_demo or ((texture_var < 62.0) and (gloss_ratio > 0.08))
         return is_traction_hazard, texture_var
 
-    def draw_ar_lane_guidance(self, frame, poly, is_traction_hazard=False):
+    def detect_lane_position(self, frame, poly):
+        """
+        Calculates whether the vehicle is traveling in the LEFT, CENTER, or RIGHT lane.
+        Analyzes road markings and lane boundary deviation relative to vehicle center.
+        """
+        h, w = frame.shape[:2]
+        y_min = int(h * 0.65)
+        y_max = int(h * 0.95)
+        roi = frame[y_min:y_max, :]
+
+        # Fast HLS thresholding for white and yellow highway lane lines
+        hls = cv2.cvtColor(roi, cv2.COLOR_BGR2HLS)
+        h_ch, l_ch, s_ch = cv2.split(hls)
+
+        white_mask = (l_ch > 170)
+        yellow_mask = (h_ch >= 15) & (h_ch <= 38) & (s_ch > 70) & (l_ch > 95)
+        lane_mask = (white_mask | yellow_mask).astype(np.uint8) * 255
+
+        # Horizontal centroid of detected road markings
+        mid_x = w // 2
+        left_pts = np.argwhere(lane_mask[:, :mid_x] > 0)
+        right_pts = np.argwhere(lane_mask[:, mid_x:] > 0)
+
+        lane_state = "CENTER LANE"
+        lane_dir = "center"
+        lane_arrow = "●"
+
+        if len(left_pts) > 25 and len(right_pts) > 25:
+            left_mean_x = float(np.mean(left_pts[:, 1]))
+            right_mean_x = float(mid_x + np.mean(right_pts[:, 1]))
+            lane_center_x = (left_mean_x + right_mean_x) / 2.0
+            vehicle_center_x = w / 2.0
+            offset_ratio = (vehicle_center_x - lane_center_x) / (w * 0.5)
+
+            if offset_ratio < -0.10:
+                lane_state = "LEFT LANE"
+                lane_dir = "left"
+                lane_arrow = "◀"
+            elif offset_ratio > 0.10:
+                lane_state = "RIGHT LANE"
+                lane_dir = "right"
+                lane_arrow = "▶"
+            else:
+                lane_state = "CENTER LANE"
+                lane_dir = "center"
+                lane_arrow = "●"
+        elif len(left_pts) > 35 and len(right_pts) <= 15:
+            lane_state = "RIGHT LANE"
+            lane_dir = "right"
+            lane_arrow = "▶"
+        elif len(right_pts) > 35 and len(left_pts) <= 15:
+            lane_state = "LEFT LANE"
+            lane_dir = "left"
+            lane_arrow = "◀"
+
+        return lane_state, lane_dir, lane_arrow
+
+    def draw_ar_lane_guidance(self, frame, poly, is_traction_hazard=False, lane_state="CENTER LANE", lane_dir="center", lane_arrow="●"):
         """
         Sleek, futuristic AR Lane Boundary Guidance (NO SOLID BLUE FILL):
         Asphalt road is 100% visible and un-obscured!
         - Dual glowing laser boundary rails
+        - Real-time Lane Position HUD Badge (LEFT LANE / CENTER LANE / RIGHT LANE)
         - Distance calibration cross-ticks (30m, 15m, 5m)
         - Dashed center path guide
-        - When traction loss predicted: rails pulse Neon Purple (240, 0, 230)
         """
         h, w = frame.shape[:2]
         out = frame.copy()
 
-        if is_traction_hazard:
-            laser_color = (240, 0, 230)   # Neon Purple
-            glow_color = (180, 0, 160)
-        else:
-            laser_color = (255, 230, 0)   # Neon Cyan
-            glow_color = (180, 160, 0)
+        laser_color = (255, 230, 0)   # Neon Cyan
+        glow_color = (180, 160, 0)
+
+        left_color = (0, 215, 255) if lane_dir == 'left' else laser_color
+        right_color = (0, 215, 255) if lane_dir == 'right' else laser_color
 
         # Glow layer (subtle anti-aliased aura)
         glow_layer = out.copy()
@@ -349,8 +405,8 @@ class OmniVisionEngine:
         cv2.addWeighted(glow_layer, 0.35, out, 0.65, 0, out)
 
         # Sharp laser boundary lines
-        cv2.line(out, tuple(poly[0]), tuple(poly[3]), laser_color, 2, cv2.LINE_AA)
-        cv2.line(out, tuple(poly[1]), tuple(poly[2]), laser_color, 2, cv2.LINE_AA)
+        cv2.line(out, tuple(poly[0]), tuple(poly[3]), left_color, 2, cv2.LINE_AA)
+        cv2.line(out, tuple(poly[1]), tuple(poly[2]), right_color, 2, cv2.LINE_AA)
 
         # Distance calibration ticks & hash marks
         ticks = [(0.30, "30m"), (0.60, "15m"), (0.90, "5m")]
@@ -371,16 +427,19 @@ class OmniVisionEngine:
             pt2 = (int(c_top[0] * (1 - t2) + c_bot[0] * t2), int(c_top[1] * (1 - t2) + c_bot[1] * t2))
             cv2.line(out, pt1, pt2, laser_color, 1, cv2.LINE_AA)
 
-        if is_traction_hazard:
-            banner_y = int(h * 0.88)
-            banner_txt = "[ ! HYDRO-GRIP ALERT : TRACTION LOSS PREDICTED - BLACK ICE / AQUAPLANE ! ]"
-            (tw, th), _ = cv2.getTextSize(banner_txt, cv2.FONT_HERSHEY_SIMPLEX, 0.50, 2)
-            bx1, by1 = (w - tw) // 2 - 12, banner_y - 18
-            bx2, by2 = (w + tw) // 2 + 12, banner_y + 8
-            cv2.rectangle(out, (bx1, by1), (bx2, by2), (20, 0, 30), -1)
-            cv2.rectangle(out, (bx1, by1), (bx2, by2), laser_color, 2)
-            cv2.putText(out, banner_txt, ((w - tw) // 2, banner_y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 255, 255), 2, cv2.LINE_AA)
+        # Floating AR Lane Direction Pill at bottom center
+        hud_w, hud_h = 220, 26
+        hx1, hy1 = (w - hud_w) // 2, h - 36
+        hx2, hy2 = hx1 + hud_w, hy1 + hud_h
+        overlay = out.copy()
+        cv2.rectangle(overlay, (hx1, hy1), (hx2, hy2), (6, 10, 18), -1)
+        cv2.addWeighted(overlay, 0.80, out, 0.20, 0, out)
+
+        pill_color = (0, 255, 102) if lane_dir == 'center' else (0, 215, 255) if lane_dir == 'left' else (255, 170, 0)
+        cv2.rectangle(out, (hx1, hy1), (hx2, hy2), pill_color, 1)
+        lane_text = f"LANE: {lane_arrow} {lane_state}"
+        cv2.putText(out, lane_text, (hx1 + 16, hy1 + 18),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, pill_color, 1, cv2.LINE_AA)
 
         return out
 
@@ -753,34 +812,37 @@ class OmniVisionEngine:
             frame, corridor_poly, force_traction_demo=force_traction_demo
         )
 
-        # Determine Climate / Seasonal Profile & Dynamic Safe Speed Limit
+        # Determine Climate / Seasonal Profile & Dynamic Safe Speed Limit (Strict 80 km/h max)
         vid_lower = str(active_video_name).lower()
         if is_traction_hazard or ('rain' in vid_lower and 'traction' in str(mode)):
             climate_profile = "WINTER / BLACK ICE HAZARD"
-            speed_limit = 35
         elif feat_fog or (dc_mean > 85.0 and avg_brightness > 80.0) or 'fog' in vid_lower:
             climate_profile = "WINTER / DENSE FOG"
-            speed_limit = 50
         elif 'rain' in vid_lower:
             climate_profile = "MONSOON / HEAVY RAIN"
-            speed_limit = 60
         elif feat_night or avg_brightness < 42.0 or 'night' in vid_lower:
             climate_profile = "NIGHT / LOW LIGHT"
-            speed_limit = 50
         elif feat_glare or 'glare' in vid_lower:
             climate_profile = "SUMMER / HIGH GLARE"
-            speed_limit = 65
         else:
             climate_profile = "OPTIMAL / CLEAR ROAD"
-            speed_limit = 80
+        
+        # Speed limit strictly fixed to 80 km/h as requested
+        speed_limit = 80
 
-        # Dynamic vehicle speed (Real GPS if available, else simulated dynamic)
-        if live_speed is not None and float(live_speed) > 0:
-            current_speed = int(round(float(live_speed)))
+        # Dynamic vehicle speed (Strictly 0 km/h when sitting still, accurate live GPS speed)
+        if live_speed is not None:
+            current_speed = max(0, int(round(float(live_speed))))
         else:
-            base_speed = 74
-            fluct = int(np.sin(self.frame_idx * 0.12) * 8)
-            current_speed = base_speed + fluct
+            is_live_dev = any(k in vid_lower for k in ['live', 'phone', 'mobile', 'laptop', 'cam0', 'car', 'cam1'])
+            if is_live_dev:
+                current_speed = 0
+            elif 'traffic' in vid_lower or 'dashcam' in vid_lower or 'demo' in vid_lower:
+                base_speed = 74
+                fluct = int(np.sin(self.frame_idx * 0.12) * 8)
+                current_speed = base_speed + fluct
+            else:
+                current_speed = 0
         is_overspeed = (current_speed > speed_limit)
 
         active_enhancements = []
@@ -816,29 +878,31 @@ class OmniVisionEngine:
             enhanced = self.render_cyber_lidar(enhanced, corridor_poly)
             active_enhancements.append("CYBER-LIDAR 64-BEAM")
 
-        # Step G: AR Lane Guidance (Laser boundary rails, distance hashes)
+        # Step G: AR Lane Guidance (Laser boundary rails, distance hashes, and real-time lane tracking)
+        lane_state, lane_dir, lane_arrow = self.detect_lane_position(enhanced, corridor_poly)
         if feat_lanes:
-            enhanced = self.draw_ar_lane_guidance(enhanced, corridor_poly, is_traction_hazard=is_traction_hazard)
-            if is_traction_hazard:
-                active_enhancements.append("HYDRO-GRIP: BLACK ICE")
-            else:
-                active_enhancements.append("AR LANE GUIDES")
+            enhanced = self.draw_ar_lane_guidance(
+                enhanced, corridor_poly,
+                is_traction_hazard=is_traction_hazard,
+                lane_state=lane_state,
+                lane_dir=lane_dir,
+                lane_arrow=lane_arrow
+            )
+            active_enhancements.append(f"LANE: {lane_state} {lane_arrow}")
 
         # Step H: Vehicle Radar, Distance & Ghost-Vision Tracking
         if feat_radar:
-            enhanced, brake_alert, ttc, targets, closest_d = self.track_targets_and_ghost_vision(
+            enhanced, _, ttc, targets, closest_d = self.track_targets_and_ghost_vision(
                 enhanced, corridor_poly, force_ghost=True
             )
             active_enhancements.append("GHOST-VISION (+1.5s)")
         else:
-            brake_alert = False
             ttc = 0.0
             targets = []
             closest_d = None
 
-        if is_traction_hazard:
-            brake_alert = True
-            ttc = min(ttc if ttc > 0 else 0.8, 0.8)
+        # Collision alert suppression: only overspeed alerts are permitted
+        brake_alert = False
 
         # Step I: Road Pothole Scanner (Neon green, 3D asphalt isolated)
         scan_potholes = feat_potholes
@@ -852,12 +916,12 @@ class OmniVisionEngine:
         else:
             pothole_count = 0
 
-        # Step J: V2V AR Holographic Sky Billboard
+        # Step J: V2V AR Holographic Sky Billboard (Only drawn if explicitly provided, no automatic intrusion)
         final_output = self.draw_v2v_holographic_billboard(enhanced, v2v_payload)
         if v2v_payload:
             active_enhancements.append(f"V2V: {v2v_payload.get('event', 'ALERT')[:14]}")
 
-        # Step K: Over-Speed Telemetry
+        # Step K: Over-Speed Telemetry (Speed limit strictly 80)
         if is_overspeed:
             active_enhancements.append(f"OVERSPEED ({current_speed}/{speed_limit})")
 
@@ -889,6 +953,9 @@ class OmniVisionEngine:
             "speed_limit": speed_limit,
             "overspeed": is_overspeed,
             "climate_profile": climate_profile,
+            "current_lane": lane_state,
+            "lane_direction": lane_dir,
+            "lane_arrow": lane_arrow,
             "enhancements": active_enhancements
         }
 
