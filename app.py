@@ -399,6 +399,7 @@ class ThreadedCamera:
         self.running = True
         self.last_frame_time = 0.0
         self.last_open_attempt = 0.0
+        self.frame_seq = 0
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.thread.start()
 
@@ -408,8 +409,11 @@ class ThreadedCamera:
             if not c.isOpened():
                 c = cv2.VideoCapture(self.src)
             if c.isOpened():
+                # Prefer hardware MJPG for uncompressed-speed 30-60 FPS without USB 2.0 YUY2 bottleneck
+                c.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
                 c.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 c.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+                c.set(cv2.CAP_PROP_FPS, 30)
                 c.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 return c
         except Exception:
@@ -429,20 +433,30 @@ class ThreadedCamera:
                     time.sleep(0.5)
                     continue
 
+            # In DirectShow, self.cap.read() naturally paces at the camera hardware frame rate (30 FPS)
             ret, frame = self.cap.read()
             if ret and frame is not None and frame.size > 0:
                 with self.lock:
                     self.latest_frame = frame
                     self.last_frame_time = time.time()
-                time.sleep(0.005)
+                    self.frame_seq += 1
             else:
-                time.sleep(0.01)
+                time.sleep(0.005)
 
     def read(self):
         with self.lock:
             if self.latest_frame is not None and (time.time() - self.last_frame_time) < 2.5:
                 return True, self.latest_frame.copy()
             return False, None
+
+    def read_fresh(self, last_seq):
+        """Returns (ok, frame, seq). If frame has not updated since last_seq, returns (False, None, seq)."""
+        with self.lock:
+            if self.latest_frame is not None and (time.time() - self.last_frame_time) < 2.5:
+                if self.frame_seq == last_seq:
+                    return False, None, self.frame_seq
+                return True, self.latest_frame.copy(), self.frame_seq
+            return False, None, -1
 
     def release(self):
         self.running = False
@@ -490,7 +504,9 @@ def process_video():
 
     playlist_index = 0
     cap = None
-    last_processed_phone_id = -1
+    last_phone_seq = -1
+    last_laptop_seq = -1
+    last_browser_laptop_seq = -1
     prev_time = time.time()
     last_v2v_trigger_time = time.time()
     last_successful_frame_time = time.time()
@@ -512,6 +528,9 @@ def process_video():
                 cap.release()
                 cap = None
             engine.reset_history()
+            last_phone_seq = -1
+            last_laptop_seq = -1
+            last_browser_laptop_seq = -1
 
         with lock:
             src = current_source
@@ -537,6 +556,10 @@ def process_video():
             with lock:
                 has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 3.0)
                 if has_phone:
+                    if phone_frame_id == last_phone_seq:
+                        time.sleep(0.003)
+                        continue
+                    last_phone_seq = phone_frame_id
                     raw_frame = phone_frame_buffer.copy()
                     display_clip = "📱 LIVE MOBILE DASH CAM (WIRELESS)"
 
@@ -549,9 +572,16 @@ def process_video():
         # Case 2: Laptop Dash Cam (Direct HW Webcam Cam 0 or Browser getUserMedia)
         # -------------------------------------------------------------
         elif src in ['laptop', 'cam0', '0']:
-            # Priority 1: Direct native hardware webcam (0ms lag, 30-40+ FPS)
-            ok0, f0 = get_threaded_cam(0).read()
+            # Priority 1: Direct native hardware webcam (0ms lag, 30 FPS)
+            cam0 = get_threaded_cam(0)
+            ok0, f0, seq0 = cam0.read_fresh(last_laptop_seq)
+            if seq0 != -1 and seq0 == last_laptop_seq:
+                # Same hardware frame; yield CPU to prevent spinning
+                time.sleep(0.003)
+                continue
+
             if ok0 and f0 is not None and f0.size > 0:
+                last_laptop_seq = seq0
                 raw_frame = f0
                 display_clip = "💻 LIVE LAPTOP DASH CAM (BUILT-IN)"
             else:
@@ -559,6 +589,10 @@ def process_video():
                 with lock:
                     has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 3.0)
                     if has_laptop_stream:
+                        if laptop_frame_id == last_browser_laptop_seq:
+                            time.sleep(0.003)
+                            continue
+                        last_browser_laptop_seq = laptop_frame_id
                         raw_frame = laptop_frame_buffer.copy()
                         display_clip = "💻 LIVE LAPTOP DASH CAM (BROWSER)"
 
@@ -785,8 +819,11 @@ def process_video():
                 "local_ip": get_local_ip()
             }
             current_frame = dashboard_frame
-            # Encode single high-efficiency JPEG buffer for all streaming clients (zero encoding in generator)
-            ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 58])
+            # Encode single high-efficiency JPEG buffer for all streaming clients (fast encoding, zero generator overhead)
+            ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
+                int(cv2.IMWRITE_JPEG_QUALITY), 56,
+                int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
+            ])
             if ret_enc:
                 current_jpeg_bytes = buf_enc.tobytes()
             frame_seq_id += 1
@@ -909,6 +946,15 @@ def receive_phone_frame():
     """Receives binary JPEG frames from mobile phone camera."""
     global phone_frame_buffer, phone_last_seen, phone_frame_id
     try:
+        ts_str = request.headers.get('X-Timestamp')
+        if ts_str:
+            try:
+                # Discard frames delayed more than 180ms in network queue
+                if (time.time() * 1000.0) - float(ts_str) > 180.0:
+                    return '', 204
+            except Exception:
+                pass
+
         data = request.get_data()
         if not data:
             return '', 400
@@ -930,6 +976,15 @@ def receive_laptop_frame():
     """Receives binary JPEG frames from laptop webcam browser capture."""
     global laptop_frame_buffer, laptop_last_seen, laptop_frame_id
     try:
+        ts_str = request.headers.get('X-Timestamp')
+        if ts_str:
+            try:
+                # Discard frames delayed more than 180ms in network queue
+                if (time.time() * 1000.0) - float(ts_str) > 180.0:
+                    return '', 204
+            except Exception:
+                pass
+
         data = request.get_data()
         if not data:
             return '', 400

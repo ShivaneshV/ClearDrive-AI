@@ -498,11 +498,9 @@ class OmniVisionEngine:
         left_color = (0, 215, 255) if lane_dir == 'left' else laser_color
         right_color = (0, 215, 255) if lane_dir == 'right' else laser_color
 
-        # Glow layer (subtle anti-aliased aura)
-        glow_layer = out.copy()
-        cv2.line(glow_layer, tuple(poly[0]), tuple(poly[3]), glow_color, 6, cv2.LINE_AA)
-        cv2.line(glow_layer, tuple(poly[1]), tuple(poly[2]), glow_color, 6, cv2.LINE_AA)
-        cv2.addWeighted(glow_layer, 0.35, out, 0.65, 0, out)
+        # Glow layer (direct anti-aliased aura - 0ms overhead)
+        cv2.line(out, tuple(poly[0]), tuple(poly[3]), (90, 80, 0), 4, cv2.LINE_AA)
+        cv2.line(out, tuple(poly[1]), tuple(poly[2]), (90, 80, 0), 4, cv2.LINE_AA)
 
         # Sharp laser boundary lines
         cv2.line(out, tuple(poly[0]), tuple(poly[3]), left_color, 2, cv2.LINE_AA)
@@ -527,13 +525,13 @@ class OmniVisionEngine:
             pt2 = (int(c_top[0] * (1 - t2) + c_bot[0] * t2), int(c_top[1] * (1 - t2) + c_bot[1] * t2))
             cv2.line(out, pt1, pt2, laser_color, 1, cv2.LINE_AA)
 
-        # Floating AR Lane Direction Pill at bottom center
+        # Floating AR Lane Direction Pill at bottom center (Localized ROI blend - 0ms overhead)
         hud_w, hud_h = 220, 26
         hx1, hy1 = (w - hud_w) // 2, h - 36
         hx2, hy2 = hx1 + hud_w, hy1 + hud_h
-        overlay = out.copy()
-        cv2.rectangle(overlay, (hx1, hy1), (hx2, hy2), (6, 10, 18), -1)
-        cv2.addWeighted(overlay, 0.80, out, 0.20, 0, out)
+        roi = out[hy1:hy2, hx1:hx2]
+        dark_box = np.full_like(roi, (6, 10, 18))
+        cv2.addWeighted(dark_box, 0.80, roi, 0.20, 0, roi)
 
         pill_color = (0, 255, 102) if lane_dir == 'center' else (0, 215, 255) if lane_dir == 'left' else (255, 170, 0)
         cv2.rectangle(out, (hx1, hy1), (hx2, hy2), pill_color, 1)

@@ -2851,45 +2851,58 @@
             }).catch(e => {});
         }
 
+        let isDeviceUploading = false;
         function transmitLaptopFrames() {
             if (!isLaptopStreaming || !laptopVideoElem) return;
 
             function sendNext() {
                 if (!isLaptopStreaming) return;
 
-                if (laptopVideoElem.readyState >= 2 && activeLaptopUploads < 2) {
-                    const ctx = laptopCanvas.getContext('2d');
-                    ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
-
-                    // Ultra-fast 640x360 @ 0.48 JPEG: ~10KB payload transfers in 8ms for buttery 30+ FPS
-                    laptopCanvas.toBlob(blob => {
-                        if (!blob || !isLaptopStreaming) return;
-
-                        const vSel = document.getElementById('videoSelect');
-                        const targetEndpoint = (vSel && vSel.value === 'phone') ? '/api/phone_frame' : '/api/laptop_frame';
-
-                        activeLaptopUploads++;
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 95);
-
-                        fetch(targetEndpoint, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'image/jpeg' },
-                            body: blob,
-                            signal: controller.signal
-                        })
-                        .catch(() => {})
-                        .finally(() => {
-                            clearTimeout(timeoutId);
-                            activeLaptopUploads = Math.max(0, activeLaptopUploads - 1);
-                        });
-                    }, 'image/jpeg', 0.48);
+                if (isDeviceUploading || laptopVideoElem.readyState < 2) {
+                    laptopUploadTimer = setTimeout(sendNext, 16);
+                    return;
                 }
 
-                laptopUploadTimer = setTimeout(sendNext, 33);
+                isDeviceUploading = true;
+                const ctx = laptopCanvas.getContext('2d');
+                ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
+
+                const nowTs = Date.now();
+                laptopCanvas.toBlob(blob => {
+                    if (!blob || !isLaptopStreaming) {
+                        isDeviceUploading = false;
+                        laptopUploadTimer = setTimeout(sendNext, 16);
+                        return;
+                    }
+
+                    const vSel = document.getElementById('videoSelect');
+                    const targetEndpoint = (vSel && vSel.value === 'phone') ? '/api/phone_frame' : '/api/laptop_frame';
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 200);
+
+                    fetch(targetEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'image/jpeg',
+                            'X-Timestamp': nowTs.toString()
+                        },
+                        body: blob,
+                        signal: controller.signal
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                        clearTimeout(timeoutId);
+                        isDeviceUploading = false;
+                        if (isLaptopStreaming) {
+                            laptopUploadTimer = setTimeout(sendNext, 4);
+                        }
+                    });
+                }, 'image/jpeg', 0.45);
             }
 
             if (laptopUploadTimer) clearTimeout(laptopUploadTimer);
+            isDeviceUploading = false;
             sendNext();
         }
 
@@ -4134,7 +4147,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=7').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=8').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
