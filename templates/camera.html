@@ -14,34 +14,39 @@
             flex-direction: column;
             align-items: center;
             justify-content: space-between;
-            height: 100vh;
-            padding: 16px;
-            overflow: hidden;
+            min-height: 100dvh;
+            height: auto;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding: 12px;
         }
         header {
             width: 100%;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 243, 255, 0.25);
+            flex-shrink: 0;
         }
-        .brand { font-size: 1.1rem; font-weight: 900; letter-spacing: 1px; }
+        .brand { font-size: 0.98rem; font-weight: 900; letter-spacing: 0.8px; }
         .status-pill {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             padding: 4px 10px;
             border-radius: 20px;
             font-weight: bold;
-            letter-spacing: 1px;
+            letter-spacing: 0.8px;
             border: 1px solid #00ff66;
             background: rgba(0, 255, 102, 0.15);
             color: #00ff66;
+            white-space: nowrap;
         }
         .preview-box {
             position: relative;
             width: 100%;
-            flex: 1;
-            margin: 14px 0;
+            min-height: 250px;
+            max-height: 52vh;
+            margin: 10px 0;
             background: #000;
             border-radius: 8px;
             overflow: hidden;
@@ -49,34 +54,40 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
         }
         video {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            display: block;
         }
         .hud-overlay {
             position: absolute;
-            top: 10px; left: 10px;
-            font-size: 0.75rem;
+            top: 8px; left: 8px;
+            font-size: 0.72rem;
             font-family: monospace;
-            color: rgba(255, 255, 255, 0.7);
-            background: rgba(0, 0, 0, 0.5);
-            padding: 4px 8px;
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(4, 9, 18, 0.75);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            padding: 3px 8px;
             border-radius: 4px;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
         }
         .controls {
             width: 100%;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
+            flex-shrink: 0;
         }
         button {
             width: 100%;
-            padding: 14px;
-            font-size: 1.05rem;
+            padding: 12px;
+            font-size: 1.0rem;
             font-weight: bold;
-            letter-spacing: 1px;
+            letter-spacing: 0.8px;
             border-radius: 8px;
             cursor: pointer;
             border: none;
@@ -85,7 +96,7 @@
         .btn-broadcast {
             background: #00ff66;
             color: #031408;
-            box-shadow: 0 0 20px rgba(0, 255, 102, 0.6);
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.5);
         }
         .btn-broadcast:active { transform: scale(0.98); }
         .btn-stop {
@@ -93,11 +104,44 @@
             color: #fff;
             box-shadow: 0 0 20px rgba(255, 51, 68, 0.6);
         }
+        /* Camera Facing Selector Strip */
+        .camera-facing-strip {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            width: 100%;
+        }
+        .btn-facing {
+            background: #0e1b2c;
+            border: 1.5px solid #1f395b;
+            color: #8daac7;
+            padding: 10px 8px;
+            font-size: 0.82rem;
+            font-weight: 800;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-facing:hover {
+            border-color: #00f3ff;
+            color: #fff;
+        }
+        .btn-facing.cam-active {
+            border-color: #00ff66 !important;
+            background: rgba(0, 255, 102, 0.18) !important;
+            color: #00ff66 !important;
+            box-shadow: 0 0 14px rgba(0, 255, 102, 0.4) !important;
+        }
         .footer-text {
-            font-size: 0.70rem;
+            font-size: 0.68rem;
             color: #55708c;
             text-align: center;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.6px;
+            line-height: 1.4;
         }
     </style>
 </head>
@@ -107,17 +151,17 @@
         <div id="statusPill" class="status-pill">STANDBY</div>
     </header>
 
-    <div id="httpsWarning" style="display: none; width: 100%; background: rgba(255, 68, 85, 0.16); border: 2px solid #ff4455; border-radius: 8px; padding: 14px; margin-top: 10px; text-align: center; box-sizing: border-box;">
-        <div style="color: #ff4455; font-weight: 900; font-size: 1.0rem; margin-bottom: 6px; letter-spacing: 1px;">
+    <div id="httpsWarning" style="display: none; width: 100%; background: rgba(255, 68, 85, 0.16); border: 2px solid #ff4455; border-radius: 8px; padding: 12px; margin-top: 8px; text-align: center; box-sizing: border-box;">
+        <div style="color: #ff4455; font-weight: 900; font-size: 0.95rem; margin-bottom: 4px; letter-spacing: 0.8px;">
             🔒 HTTPS REQUIRED BY MOBILE CHROME
         </div>
-        <div style="color: #cbdbe8; font-size: 0.82rem; line-height: 1.5; margin-bottom: 10px;">
-            Android Chrome blocks the camera on HTTP even when permission is granted. Tap below to switch to the secure stream:
+        <div style="color: #cbdbe8; font-size: 0.78rem; line-height: 1.4; margin-bottom: 8px;">
+            Android Chrome blocks camera on HTTP even when permission is granted. Tap below for secure stream:
         </div>
-        <a id="httpsLink" href="#" style="display: block; background: #00f3ff; color: #050810; font-weight: 900; padding: 12px; border-radius: 6px; text-decoration: none; font-size: 0.95rem; letter-spacing: 1px; box-shadow: 0 0 15px rgba(0,243,255,0.6);">
+        <a id="httpsLink" href="#" style="display: block; background: #00f3ff; color: #050810; font-weight: 900; padding: 10px; border-radius: 6px; text-decoration: none; font-size: 0.88rem; letter-spacing: 0.8px; box-shadow: 0 0 15px rgba(0,243,255,0.6);">
             ⚡ TAP TO OPEN SECURE HTTPS (PORT 5001)
         </a>
-        <div style="color: #ffd700; font-size: 0.76rem; margin-top: 8px;">
+        <div style="color: #ffd700; font-size: 0.72rem; margin-top: 6px;">
             (When Chrome says "Connection not private", tap <b>Advanced</b> &rarr; <b>Proceed</b>)
         </div>
     </div>
@@ -128,20 +172,35 @@
     </div>
 
     <div class="controls">
+        <!-- Prominent Back vs Front Road Dashcam Selector -->
+        <div class="camera-facing-strip">
+            <button class="btn-facing cam-active" id="btnFacingBack" onclick="switchFacingMode('environment')" title="Turn on Back / Rear Camera for Road View">
+                <span>📷</span> ROAD CAM (BACK)
+            </button>
+            <button class="btn-facing" id="btnFacingFront" onclick="switchFacingMode('user')" title="Turn on Front / Selfie Camera for Cabin View">
+                <span>🤳</span> CABIN CAM (FRONT)
+            </button>
+        </div>
+
         <button id="broadcastBtn" class="btn-broadcast" onclick="toggleBroadcast()">
             🚀 START BROADCASTING TO LAPTOP
         </button>
-        <div style="display: flex; gap: 8px; margin-top: 10px;">
-            <button onclick="togglePhone180()" style="flex: 1; padding: 10px; background: #111d2e; border: 1px solid #ff9900; color: #ffea00; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button onclick="togglePhone180()" style="padding: 10px; background: #111d2e; border: 1px solid #ff9900; color: #ffea00; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.80rem;">
                 🙃 FLIP 180°
             </button>
-            <button onclick="cyclePhoneRotation()" style="flex: 1; padding: 10px; background: #111d2e; border: 1px solid #00f3ff; color: #00f3ff; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">
+            <button onclick="cyclePhoneRotation()" style="padding: 10px; background: #111d2e; border: 1px solid #00f3ff; color: #00f3ff; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.80rem;">
                 🔄 ROTATE 90° (<span id="phoneRotLabel">0°</span>)
             </button>
         </div>
+
         <div class="footer-text">
             POSITION PHONE ON DASHBOARD FACING FORWARD ROAD // TRANSMITTING IN HD
         </div>
+        <a href="/" style="color: #6484a4; font-size: 0.74rem; text-decoration: none; text-align: center; margin-top: 2px;">
+            &larr; Open Autonomous Vision Cockpit Dashboard
+        </a>
     </div>
 
     <canvas id="captureCanvas" style="display: none;"></canvas>
@@ -153,17 +212,60 @@
         const statusPill = document.getElementById('statusPill');
         const hudInfo = document.getElementById('hudInfo');
         const broadcastBtn = document.getElementById('broadcastBtn');
+        const btnFacingBack = document.getElementById('btnFacingBack');
+        const btnFacingFront = document.getElementById('btnFacingFront');
 
         let isStreaming = false;
         let streamInterval = null;
         let frameCount = 0;
         let lastFpsTime = performance.now();
         let currentFps = 0;
+        let currentFacing = 'environment'; // Default: Rear Road Camera for Dashcam
+        let activeMediaStream = null;
 
-        async function initCamera() {
+        function stopCurrentStream() {
+            if (activeMediaStream) {
+                activeMediaStream.getTracks().forEach(track => {
+                    try { track.stop(); } catch (e) {}
+                });
+                activeMediaStream = null;
+            }
+            if (video.srcObject) {
+                try {
+                    video.srcObject.getTracks().forEach(track => {
+                        try { track.stop(); } catch (e) {}
+                    });
+                } catch (e) {}
+                video.srcObject = null;
+            }
+        }
+
+        async function switchFacingMode(mode) {
+            currentFacing = mode;
+            updateFacingButtons();
+            await initCamera(mode);
+        }
+
+        function updateFacingButtons() {
+            if (btnFacingBack && btnFacingFront) {
+                if (currentFacing === 'environment') {
+                    btnFacingBack.classList.add('cam-active');
+                    btnFacingFront.classList.remove('cam-active');
+                } else {
+                    btnFacingFront.classList.add('cam-active');
+                    btnFacingBack.classList.remove('cam-active');
+                }
+            }
+        }
+
+        async function initCamera(desiredFacing = currentFacing) {
+            currentFacing = desiredFacing;
+            updateFacingButtons();
+
             // Android Chrome strictly requires a Secure Context (HTTPS or localhost)
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 const warnBox = document.getElementById('httpsWarning');
+                const httpsLink = document.getElementById('httpsLink');
                 const targetHttps = (window.location.protocol === 'https:')
                     ? window.location.href
                     : `https://${window.location.hostname}:5001/camera`;
@@ -176,31 +278,89 @@
                 return;
             }
 
+            // Always stop any previously active stream tracks to release the hardware camera
+            stopCurrentStream();
+
+            let stream = null;
+            const isBack = (currentFacing === 'environment');
+
+            // Tier 1: Try exact facingMode constraint
             try {
-                // Request back/rear camera for road dashcam view
-                const stream = await navigator.mediaDevices.getUserMedia({
+                stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        facingMode: { ideal: "environment" },
+                        facingMode: { exact: currentFacing },
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     },
                     audio: false
                 });
+            } catch (err1) {
+                // Tier 2: Fallback to ideal facingMode constraint
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { ideal: currentFacing },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
+                        audio: false
+                    });
+                } catch (err2) {
+                    // Tier 3: Try device enumeration for rear/front lens
+                    try {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                        let matchedDevice = null;
+
+                        if (isBack) {
+                            matchedDevice = videoDevices.find(d => /back|rear|environment/i.test(d.label)) || videoDevices[videoDevices.length - 1];
+                        } else {
+                            matchedDevice = videoDevices.find(d => /front|user|selfie/i.test(d.label)) || videoDevices[0];
+                        }
+
+                        if (matchedDevice && matchedDevice.deviceId) {
+                            stream = await navigator.mediaDevices.getUserMedia({
+                                video: { deviceId: { exact: matchedDevice.deviceId } },
+                                audio: false
+                            });
+                        } else {
+                            throw new Error("No device match");
+                        }
+                    } catch (err3) {
+                        // Tier 4: Fallback to basic string facingMode
+                        try {
+                            stream = await navigator.mediaDevices.getUserMedia({
+                                video: { facingMode: currentFacing },
+                                audio: false
+                            });
+                        } catch (err4) {
+                            // Tier 5: Final fallback to any video input
+                            stream = await navigator.mediaDevices.getUserMedia({
+                                video: true,
+                                audio: false
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (stream) {
+                activeMediaStream = stream;
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
                     canvas.width = 1280;
                     canvas.height = 720;
-                    statusPill.textContent = 'CAMERA READY (720p HD)';
+                    const camLabel = isBack ? '📷 ROAD CAM READY' : '🤳 CABIN CAM READY';
+                    statusPill.textContent = `${camLabel} (720p HD)`;
                     statusPill.style.color = '#00ff66';
                     statusPill.style.borderColor = '#00ff66';
-                    hudInfo.textContent = `FPS: IDLE | 720p FINE HD RESOLUTION`;
+                    hudInfo.textContent = `LENS: ${isBack ? 'REAR (ROAD)' : 'FRONT (CABIN)'} | 720p HD READY`;
                 };
-            } catch (err) {
-                console.error('Camera access error:', err);
+            } else {
                 statusPill.textContent = 'CAMERA BLOCKED';
                 statusPill.style.color = '#ff3344';
                 statusPill.style.borderColor = '#ff3344';
-                alert('Camera error: ' + err.message);
+                hudInfo.textContent = 'CAMERA BLOCKED // TAP ALLOW';
             }
         }
 
