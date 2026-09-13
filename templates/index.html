@@ -1468,6 +1468,74 @@
                 box-sizing: border-box !important;
             }
         }
+
+        /* ==============================================================================
+           FULLSCREEN PURE CAMERA VIEW (NO BUTTONS VISIBLE - ONLY CAMERA STREAM)
+           ============================================================================== */
+        #streamContainer:fullscreen,
+        #streamContainer:-webkit-full-screen,
+        #streamContainer:-moz-full-screen,
+        #streamContainer:-ms-fullscreen,
+        .pure-camera-fullscreen {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: #000000 !important;
+            box-shadow: none !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            z-index: 999999 !important;
+        }
+
+        #streamContainer:fullscreen #videoStream,
+        #streamContainer:-webkit-full-screen #videoStream,
+        #streamContainer:-moz-full-screen #videoStream,
+        #streamContainer:-ms-fullscreen #videoStream,
+        .pure-camera-fullscreen #videoStream {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            max-width: 100vw !important;
+            object-fit: contain !important;
+            display: block !important;
+            background: #000000 !important;
+            border: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* Strictly hide ALL buttons, overlays, and controls in fullscreen mode */
+        #streamContainer:fullscreen button,
+        #streamContainer:fullscreen .stream-cam-overlay,
+        #streamContainer:fullscreen .overlay-cam-btn,
+        #streamContainer:-webkit-full-screen button,
+        #streamContainer:-webkit-full-screen .stream-cam-overlay,
+        #streamContainer:-webkit-full-screen .overlay-cam-btn,
+        #streamContainer:-moz-full-screen button,
+        #streamContainer:-moz-full-screen .stream-cam-overlay,
+        #streamContainer:-ms-fullscreen button,
+        #streamContainer:-ms-fullscreen .stream-cam-overlay,
+        .pure-camera-fullscreen button,
+        .pure-camera-fullscreen .stream-cam-overlay,
+        .pure-camera-fullscreen .overlay-cam-btn,
+        :fullscreen button,
+        :-webkit-full-screen button {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
     </style>
 </head>
 <body>
@@ -1622,7 +1690,7 @@
                     <span id="bannerTtc" style="color: #ffea00;">TTC: --</span>
                 </div>
 
-                <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream">
+                <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream" onclick="handleVideoTap(event)" ondblclick="toggleFullscreen()">
 
                 <!-- FLOATING IN-VIDEO CAMERA ORIENTATION & LENS TOOLBAR (Always Visible Over Video) -->
                 <div class="stream-cam-overlay" id="streamCamOverlay">
@@ -2519,10 +2587,62 @@
 
         function toggleFullscreen() {
             const elem = document.getElementById('streamContainer');
-            if (!document.fullscreenElement) {
-                elem.requestFullscreen().catch(err => console.error(err));
+            if (!elem) return;
+            const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || elem.classList.contains('pure-camera-fullscreen'));
+            if (!isFull) {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => {
+                        console.warn('Fullscreen request rejected, using full-viewport mode:', err);
+                        elem.classList.add('pure-camera-fullscreen');
+                    });
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.mozRequestFullScreen) {
+                    elem.mozRequestFullScreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                } else {
+                    elem.classList.add('pure-camera-fullscreen');
+                }
             } else {
-                document.exitFullscreen();
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                elem.classList.remove('pure-camera-fullscreen');
+            }
+        }
+
+        // Sync pure camera fullscreen class on native fullscreen change events
+        function syncFullscreenState() {
+            const elem = document.getElementById('streamContainer');
+            if (!elem) return;
+            const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+            if (isFull) {
+                elem.classList.add('pure-camera-fullscreen');
+            } else {
+                elem.classList.remove('pure-camera-fullscreen');
+            }
+        }
+        document.addEventListener('fullscreenchange', syncFullscreenState);
+        document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+        document.addEventListener('mozfullscreenchange', syncFullscreenState);
+        document.addEventListener('MSFullscreenChange', syncFullscreenState);
+
+        // Double-click / double-tap video feed to toggle fullscreen mode
+        let lastVideoTapTime = 0;
+        function handleVideoTap(e) {
+            const now = Date.now();
+            if (now - lastVideoTapTime < 350) {
+                toggleFullscreen();
+                lastVideoTapTime = 0;
+            } else {
+                lastVideoTapTime = now;
             }
         }
 
@@ -3374,8 +3494,12 @@
             addTerminalLog('DVR-RECORDER', 'Blackbox video file downloaded to device storage.');
         }
 
-        // ------------------ 10 HZ LIVE TELEMETRY POLLING ------------------
+        // ------------------ 8 HZ LIVE TELEMETRY POLLING (LAG PROTECTED) ------------------
+        let isFetchingTelemetry = false;
+        let lastChipsDataStr = '';
         setInterval(async () => {
+            if (isFetchingTelemetry) return; // Prevent network request pile-up and UI stutter
+            isFetchingTelemetry = true;
             try {
                 const res = await fetch('/api/telemetry');
                 if (!res.ok) return;
@@ -3489,24 +3613,33 @@
                     });
                 }
 
-                // Perception Chips
-                const chipsContainer = document.getElementById('chipsContainer');
-                chipsContainer.innerHTML = '';
-                (data.enhancements || []).forEach(enh => {
-                    const chip = document.createElement('span');
-                    chip.className = 'chip';
-                    chip.innerHTML = `<span>⚡</span> ${enh}`;
-                    chipsContainer.appendChild(chip);
-                });
+                // Perception Chips (Guarded against DOM thrashing to eliminate layout lag)
+                const currentChipsStr = JSON.stringify(data.enhancements || []);
+                if (currentChipsStr !== lastChipsDataStr) {
+                    lastChipsDataStr = currentChipsStr;
+                    const chipsContainer = document.getElementById('chipsContainer');
+                    if (chipsContainer) {
+                        chipsContainer.innerHTML = '';
+                        (data.enhancements || []).forEach(enh => {
+                            const chip = document.createElement('span');
+                            chip.className = 'chip';
+                            chip.innerHTML = `<span>⚡</span> ${enh}`;
+                            chipsContainer.appendChild(chip);
+                        });
+                    }
+                }
 
             } catch (err) {}
-        }, 100);
+            finally {
+                isFetchingTelemetry = false;
+            }
+        }, 125);
 
         // ------------------ PWA SERVICE WORKER & NATIVE APP INSTALL ------------------
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=3').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=4').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app

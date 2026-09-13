@@ -699,8 +699,11 @@ def generate_frames():
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 243, 255), 2, cv2.LINE_AA)
     ret_w, buf_w = cv2.imencode('.jpg', warmup_img, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
     if ret_w:
+        wb = buf_w.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + buf_w.tobytes() + b'\r\n')
+               b'Content-Type: image/jpeg\r\n'
+               b'Content-Length: ' + str(len(wb)).encode() + b'\r\n\r\n' +
+               wb + b'\r\n')
 
     while True:
         with lock:
@@ -716,8 +719,11 @@ def generate_frames():
             time.sleep(sleep_time)
             continue
 
+        bytes_to_send = bytes_to_stream
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + bytes_to_stream + b'\r\n')
+               b'Content-Type: image/jpeg\r\n'
+               b'Content-Length: ' + str(len(bytes_to_send)).encode() + b'\r\n\r\n' +
+               bytes_to_send + b'\r\n')
 
 
 # ==============================================================================
@@ -735,7 +741,7 @@ def api_version():
     return jsonify({
         "version": "2.1.0-bin",
         "files": files_info,
-        "current_video": current_video_file,
+        "current_video": telemetry_data.get("current_video", PLAYLIST[0]),
         "source": current_source
     })
 
@@ -831,8 +837,14 @@ def receive_laptop_frame():
 
 @app.route('/video_feed')
 def video_feed():
-    """Live MJPEG video feed."""
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    """Live MJPEG video feed with zero proxy buffering."""
+    resp = Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    resp.headers['X-Accel-Buffering'] = 'no'
+    return resp
+
 
 
 @app.route('/api/telemetry')
