@@ -2162,18 +2162,21 @@
 
             // 3. Hardware Camera Auto-Activation
             if (device === 'laptop') {
-                // Instantly turn on laptop physical camera
-                await activateDeviceCamera();
+                if (isMobile) {
+                    await activateDeviceCamera('user');
+                } else {
+                    stopLaptopWebcam(); // Direct native hardware capture on PC (Cam 0 @ 40+ FPS)
+                }
             } else if (device === 'phone') {
                 if (isMobile) {
                     // Mobile user: instantly turn on back/road camera on this mobile device
                     currentCameraFacing = 'environment';
                     updateCameraFacingUI();
                     await activateDeviceCamera('environment');
-                    addTerminalLog('HARDWARE', '📱 Mobile Road Camera ACTIVE // Broadcasting directly to ADAS engine');
+                    addTerminalLog('HARDWARE', '📱 Mobile Road Camera ACTIVE // 30 FPS Pipelined Stream');
                 } else {
-                    // Desktop PC user: prompt pairing modal to connect mobile phone
                     stopLaptopWebcam();
+                    // Desktop PC user: check if USB C-Type phone or wireless node is active
                     fetch('/api/telemetry')
                         .then(r => r.json())
                         .then(t => {
@@ -2183,9 +2186,12 @@
                         })
                         .catch(() => openMobileModal());
                 }
+            } else if (device === 'car') {
+                stopLaptopWebcam(); // Direct native hardware capture on Cam 1 (USB / C-Type Cable @ 30 FPS)
             } else {
                 stopLaptopWebcam();
             }
+
 
             // 4. Update backend source settings
             fetch('/api/settings', {
@@ -2320,8 +2326,15 @@
             return activateDeviceCamera(desiredFacing);
         }
 
+        let activeLaptopUploads = 0;
+        let laptopUploadTimer = null;
+
         function stopLaptopWebcam() {
             isLaptopStreaming = false;
+            if (laptopUploadTimer) {
+                clearTimeout(laptopUploadTimer);
+                laptopUploadTimer = null;
+            }
             if (laptopWebcamStream) {
                 laptopWebcamStream.getTracks().forEach(track => {
                     try { track.stop(); } catch (e) {}
@@ -2400,40 +2413,41 @@
 
             function sendNext() {
                 if (!isLaptopStreaming) return;
-                if (isUploadingLaptop || laptopVideoElem.readyState < 2) {
-                    requestAnimationFrame(sendNext);
-                    return;
+
+                if (laptopVideoElem.readyState >= 2 && activeLaptopUploads < 2) {
+                    const ctx = laptopCanvas.getContext('2d');
+                    ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
+
+                    // Ultra-fast 640x360 @ 0.48 JPEG: ~10KB payload transfers in 8ms for buttery 30+ FPS
+                    laptopCanvas.toBlob(blob => {
+                        if (!blob || !isLaptopStreaming) return;
+
+                        const vSel = document.getElementById('videoSelect');
+                        const targetEndpoint = (vSel && vSel.value === 'phone') ? '/api/phone_frame' : '/api/laptop_frame';
+
+                        activeLaptopUploads++;
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 95);
+
+                        fetch(targetEndpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'image/jpeg' },
+                            body: blob,
+                            signal: controller.signal
+                        })
+                        .catch(() => {})
+                        .finally(() => {
+                            clearTimeout(timeoutId);
+                            activeLaptopUploads = Math.max(0, activeLaptopUploads - 1);
+                        });
+                    }, 'image/jpeg', 0.48);
                 }
 
-                const ctx = laptopCanvas.getContext('2d');
-                ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
-
-                isUploadingLaptop = true;
-                // Fast 640x360 @ 0.60 JPEG encode: ultra-lightweight payload (<18KB), zero buffering
-                laptopCanvas.toBlob(blob => {
-                    if (!blob || !isLaptopStreaming) {
-                        isUploadingLaptop = false;
-                        requestAnimationFrame(sendNext);
-                        return;
-                    }
-
-                    const vSel = document.getElementById('videoSelect');
-                    const targetEndpoint = (vSel && vSel.value === 'phone') ? '/api/phone_frame' : '/api/laptop_frame';
-
-                    fetch(targetEndpoint, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'image/jpeg' },
-                        body: blob
-                    })
-                    .catch(e => {})
-                    .finally(() => {
-                        isUploadingLaptop = false;
-                        requestAnimationFrame(sendNext);
-                    });
-                }, 'image/jpeg', 0.60);
+                laptopUploadTimer = setTimeout(sendNext, 33);
             }
 
-            requestAnimationFrame(sendNext);
+            if (laptopUploadTimer) clearTimeout(laptopUploadTimer);
+            sendNext();
         }
 
         function changeSource() {

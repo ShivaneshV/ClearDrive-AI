@@ -151,6 +151,7 @@ laptop_frame_buffer = None
 laptop_last_seen = 0.0
 laptop_frame_id = 0
 
+current_jpeg_bytes = None
 frame_seq_id = 0
 
 telemetry_data = {
@@ -311,9 +312,74 @@ def make_device_standby_frame(device_type, host_ip='127.0.0.1', port=5000):
     return img
 
 
+class ThreadedCamera:
+    """High-speed asynchronous hardware camera capture eliminating DirectShow/MSMF buffer latency."""
+    def __init__(self, src=0):
+        self.src = src
+        self.cap = None
+        self.latest_frame = None
+        self.lock = threading.Lock()
+        self.running = True
+        self.last_frame_time = 0.0
+        self.thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self.thread.start()
+
+    def _open_device(self):
+        try:
+            c = cv2.VideoCapture(self.src)
+            if c.isOpened():
+                c.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                c.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+                c.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                return c
+        except Exception:
+            pass
+        return None
+
+    def _capture_loop(self):
+        while self.running:
+            if self.cap is None or not self.cap.isOpened():
+                self.cap = self._open_device()
+                if self.cap is None or not self.cap.isOpened():
+                    time.sleep(0.5)
+                    continue
+
+            ret, frame = self.cap.read()
+            if ret and frame is not None and frame.size > 0:
+                with self.lock:
+                    self.latest_frame = frame
+                    self.last_frame_time = time.time()
+            else:
+                time.sleep(0.01)
+
+    def read(self):
+        with self.lock:
+            if self.latest_frame is not None and (time.time() - self.last_frame_time) < 2.5:
+                return True, self.latest_frame.copy()
+            return False, None
+
+    def release(self):
+        self.running = False
+        if self.cap:
+            try: self.cap.release()
+            except Exception: pass
+            self.cap = None
+
+
+active_hw_cameras = {}
+hw_cam_lock = threading.Lock()
+
+
+def get_threaded_cam(idx):
+    with hw_cam_lock:
+        if idx not in active_hw_cameras:
+            active_hw_cameras[idx] = ThreadedCamera(idx)
+        return active_hw_cameras[idx]
+
+
 def process_video():
     """Continuous Predictive ADAS Pipeline Loop with Zero-Freeze Watchdog."""
-    global current_frame, telemetry_data, current_source, source_changed, frame_seq_id
+    global current_frame, current_jpeg_bytes, telemetry_data, current_source, source_changed, frame_seq_id
     global active_v2v_payload, v2v_timer_start, v2v_cycle_index, force_traction_demo, split_view_enabled
 
     playlist_index = 0
@@ -359,98 +425,77 @@ def process_video():
         is_standby_guide = False
 
         # -------------------------------------------------------------
-        # Case 1: Mobile Dash Cam (Wireless Phone Node via /camera)
+        # Case 1: Mobile Dash Cam (Wireless Phone Node via /camera or USB C-Type Cable)
         # -------------------------------------------------------------
         if src in ['phone', 'mobile']:
             with lock:
-                has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 4.0)
+                has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 3.0)
                 if has_phone:
                     raw_frame = phone_frame_buffer.copy()
+                    display_clip = "📱 LIVE MOBILE DASH CAM (WIRELESS)"
 
-            if raw_frame is not None:
-                if cap is not None:
-                    cap.release()
-                    cap = None
-                display_clip = "📱 LIVE MOBILE DASH CAM"
-            else:
-                if cap is not None:
-                    cap.release()
-                    cap = None
+            # Auto-detect if phone is connected via C-type USB cable (Cam 1)
+            if raw_frame is None:
+                ok1, f1 = get_threaded_cam(1).read()
+                if ok1 and f1 is not None:
+                    raw_frame = f1
+                    display_clip = "📱 LIVE MOBILE DASH CAM (USB C-TYPE)"
+
+            if raw_frame is None:
                 raw_frame = make_device_standby_frame('phone', get_local_ip())
                 is_standby_guide = True
                 display_clip = "📱 MOBILE DASH CAM // AWAITING STREAM"
 
         # -------------------------------------------------------------
-        # Case 2: Laptop Dash Cam (Browser getUserMedia or DirectShow 0)
+        # Case 2: Laptop Dash Cam (Direct HW Webcam Cam 0 or Browser getUserMedia)
         # -------------------------------------------------------------
         elif src in ['laptop', 'cam0', '0']:
-            # First priority: check if browser webcam stream is active via /api/laptop_frame
-            with lock:
-                has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 4.0)
-                if has_laptop_stream:
-                    raw_frame = laptop_frame_buffer.copy()
-
-            # Second priority: if running locally on PC, try OpenCV VideoCapture(0)
-            if raw_frame is None:
-                if cap is None or not cap.isOpened() or last_opened_source != 'laptop_cam0':
-                    try:
-                        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-                        if not cap.isOpened():
-                            cap = cv2.VideoCapture(0)
-                        if cap.isOpened():
-                            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-                        last_opened_source = 'laptop_cam0'
-                    except Exception:
-                        cap = None
-
-                if cap is not None and cap.isOpened():
-                    ret, test_f = cap.read()
-                    if ret and test_f is not None and test_f.size > 0:
-                        raw_frame = test_f
-
-            if raw_frame is not None:
-                display_clip = "💻 LIVE LAPTOP DASH CAM"
+            # Priority 1: Direct native hardware webcam (0ms lag, 30-40+ FPS)
+            ok0, f0 = get_threaded_cam(0).read()
+            if ok0 and f0 is not None:
+                raw_frame = f0
+                display_clip = "💻 LIVE LAPTOP DASH CAM (DIRECT HW)"
             else:
-                if cap is not None:
-                    cap.release()
-                    cap = None
+                # Priority 2: Browser capture upload
+                with lock:
+                    has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 3.0)
+                    if has_laptop_stream:
+                        raw_frame = laptop_frame_buffer.copy()
+                        display_clip = "💻 LIVE LAPTOP DASH CAM (BROWSER)"
+
+            if raw_frame is None:
                 raw_frame = make_device_standby_frame('laptop', get_local_ip())
                 is_standby_guide = True
                 display_clip = "💻 LAPTOP DASH CAM // STANDBY"
 
         # -------------------------------------------------------------
-        # Case 3: Car Dash Cam (Hardware USB Dashcam on Port 1 or DirectShow)
+        # Case 3: Car Dash Cam (Hardware USB Dashcam on Port 1 or C-Type Cable)
         # -------------------------------------------------------------
         elif src in ['car', 'cam1', '1']:
-            if cap is None or not cap.isOpened() or last_opened_source != 'car_cam1':
-                try:
-                    cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
-                    if not cap.isOpened():
-                        cap = cv2.VideoCapture(1)
-                    if cap.isOpened():
-                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-                    last_opened_source = 'car_cam1'
-                except Exception:
-                    cap = None
-
-            if cap is not None and cap.isOpened():
-                ret, test_f = cap.read()
-                if ret and test_f is not None and test_f.size > 0:
-                    raw_frame = test_f
-
-            if raw_frame is not None:
-                display_clip = "🚗 LIVE CAR DASH CAM (USB)"
+            # Priority 1: Direct hardware USB Dashcam / Phone on Cam 1 (0ms lag, 30+ FPS)
+            ok1, f1 = get_threaded_cam(1).read()
+            if ok1 and f1 is not None:
+                raw_frame = f1
+                display_clip = "🚗 LIVE CAR DASH CAM (USB / C-TYPE)"
             else:
-                if cap is not None:
-                    cap.release()
-                    cap = None
+                # Priority 2: Try Cam 0 if port 1 was not mapped
+                ok0, f0 = get_threaded_cam(0).read()
+                if ok0 and f0 is not None:
+                    raw_frame = f0
+                    display_clip = "🚗 LIVE CAR DASH CAM (PORT 0)"
+                else:
+                    # Priority 3: Wireless phone upload fallback
+                    with lock:
+                        has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 3.0)
+                        if has_phone:
+                            raw_frame = phone_frame_buffer.copy()
+                            display_clip = "🚗 LIVE DASH CAM (WIRELESS)"
+
+            if raw_frame is None:
                 raw_frame = make_device_standby_frame('car', get_local_ip())
                 is_standby_guide = True
                 display_clip = "🚗 CAR DASH CAM // HARDWARE STANDBY"
+
 
         # -------------------------------------------------------------
         # Case 4: Specific Video Selected from Dropdown
@@ -629,6 +674,10 @@ def process_video():
                 "local_ip": get_local_ip()
             }
             current_frame = dashboard_frame
+            # Encode single high-efficiency JPEG buffer for all streaming clients (zero encoding in generator)
+            ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 58])
+            if ret_enc:
+                current_jpeg_bytes = buf_enc.tobytes()
             frame_seq_id += 1
 
         # Frame pacing for video playback (bypass for live camera devices)
@@ -640,8 +689,8 @@ def process_video():
 
 
 def generate_frames():
-    """Generator yielding ultra-low-latency multipart JPEG frames."""
-    global current_frame, frame_seq_id
+    """Generator yielding ultra-low-latency multipart JPEG frames with zero per-client encoding overhead."""
+    global current_jpeg_bytes, frame_seq_id
     last_seq = -1
 
     # Send immediate warmup frame so HTTP 200 headers flush instantly to Cloudflare/browser
@@ -655,28 +704,20 @@ def generate_frames():
 
     while True:
         with lock:
-            if current_frame is None or frame_seq_id == last_seq:
-                sleep_time = 0.004
-                frame_to_stream = None
+            if current_jpeg_bytes is None or frame_seq_id == last_seq:
+                sleep_time = 0.003
+                bytes_to_stream = None
             else:
                 last_seq = frame_seq_id
-                frame_to_stream = current_frame
+                bytes_to_stream = current_jpeg_bytes
                 sleep_time = 0.0
 
-        if frame_to_stream is None:
+        if bytes_to_stream is None:
             time.sleep(sleep_time)
             continue
 
-        # Fast JPEG encoding @ 58 quality (~16KB payload for zero buffer lag over Cloudflare and WiFi)
-        ret, buffer = cv2.imencode('.jpg', frame_to_stream, [int(cv2.IMWRITE_JPEG_QUALITY), 58, int(cv2.IMWRITE_JPEG_OPTIMIZE), 1])
-        if not ret:
-            continue
-
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-        
-        # Pacing to avoid TCP queue backlog over tunnels
-        time.sleep(0.025)
+               b'Content-Type: image/jpeg\r\n\r\n' + bytes_to_stream + b'\r\n')
 
 
 # ==============================================================================
@@ -753,7 +794,7 @@ def receive_phone_frame():
     try:
         data = request.get_data()
         if not data:
-            return jsonify({"status": "empty"}), 400
+            return '', 400
         nparr = np.frombuffer(data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is not None and frame.size > 0:
@@ -761,10 +802,10 @@ def receive_phone_frame():
                 phone_frame_buffer = frame
                 phone_last_seen = time.time()
                 phone_frame_id += 1
-            return jsonify({"status": "received"}), 200
-        return jsonify({"status": "decode_failed"}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+            return '', 204
+        return '', 400
+    except Exception:
+        return '', 500
 
 
 @app.route('/api/laptop_frame', methods=['POST'])
@@ -774,7 +815,7 @@ def receive_laptop_frame():
     try:
         data = request.get_data()
         if not data:
-            return jsonify({"status": "empty"}), 400
+            return '', 400
         nparr = np.frombuffer(data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is not None and frame.size > 0:
@@ -782,10 +823,10 @@ def receive_laptop_frame():
                 laptop_frame_buffer = frame
                 laptop_last_seen = time.time()
                 laptop_frame_id += 1
-            return jsonify({"status": "received"}), 200
-        return jsonify({"status": "decode_failed"}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+            return '', 204
+        return '', 400
+    except Exception:
+        return '', 500
 
 
 @app.route('/video_feed')

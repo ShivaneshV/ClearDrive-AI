@@ -423,49 +423,48 @@
             }).catch(e => {});
         }
 
+        let activePhoneUploads = 0;
         function transmitNextFrame() {
             if (!isStreaming) return;
 
-            // Skip frame if previous upload is still in-flight to prevent any queueing lag
-            if (isUploading || video.readyState < 2) {
-                scheduleNext();
-                return;
+            if (video.readyState >= 2 && activePhoneUploads < 2) {
+                canvas.width = 640;
+                canvas.height = 360;
+                ctx.drawImage(video, 0, 0, 640, 360);
+
+                // Ultra-fast 640x360 @ 0.48 JPEG: ~10KB payload, instantaneous upload, zero queueing lag
+                canvas.toBlob((blob) => {
+                    if (!blob || !isStreaming) return;
+
+                    activePhoneUploads++;
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 95);
+
+                    fetch('/api/phone_frame', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'image/jpeg' },
+                        body: blob,
+                        signal: controller.signal
+                    })
+                    .then(() => {
+                        frameCount++;
+                        const now = performance.now();
+                        if (now - lastFpsTime >= 1000) {
+                            currentFps = Math.round((frameCount * 1000) / (now - lastFpsTime));
+                            frameCount = 0;
+                            lastFpsTime = now;
+                            hudInfo.textContent = `⚡ LIVE FPS: ${currentFps} | HD ZERO-LAG ULTRA-SMOOTH`;
+                        }
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                        clearTimeout(timeoutId);
+                        activePhoneUploads = Math.max(0, activePhoneUploads - 1);
+                    });
+                }, 'image/jpeg', 0.48);
             }
 
-            isUploading = true;
-            canvas.width = 960;
-            canvas.height = 540;
-            ctx.drawImage(video, 0, 0, 960, 540);
-
-            // Fast 960x540 @ 0.62 JPEG encode: low bandwidth, instantaneous upload, buttery 30+ FPS
-            canvas.toBlob((blob) => {
-                if (!blob || !isStreaming) {
-                    isUploading = false;
-                    scheduleNext();
-                    return;
-                }
-
-                fetch('/api/phone_frame', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'image/jpeg' },
-                    body: blob
-                })
-                .then(() => {
-                    frameCount++;
-                    const now = performance.now();
-                    if (now - lastFpsTime >= 1000) {
-                        currentFps = Math.round((frameCount * 1000) / (now - lastFpsTime));
-                        frameCount = 0;
-                        lastFpsTime = now;
-                        hudInfo.textContent = `⚡ LIVE FPS: ${currentFps} | HD ULTRA-SMOOTH`;
-                    }
-                })
-                .catch(e => console.warn('Frame drop:', e))
-                .finally(() => {
-                    isUploading = false;
-                    scheduleNext();
-                });
-            }, 'image/jpeg', 0.62);
+            scheduleNext();
         }
 
         function stopBroadcast() {
