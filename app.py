@@ -663,6 +663,22 @@ def generate_frames():
 #                               FLASK WEB ROUTES
 # ==============================================================================
 
+@app.route('/api/version')
+def api_version():
+    files_info = {}
+    for f in PLAYLIST + ['yolov8n.pt', 'face_landmarker.task']:
+        if os.path.exists(f):
+            files_info[f] = os.path.getsize(f)
+        else:
+            files_info[f] = 'MISSING'
+    return jsonify({
+        "version": "2.1.0-bin",
+        "files": files_info,
+        "current_video": current_video_file,
+        "source": current_source
+    })
+
+
 @app.route('/')
 def index():
     """Renders the cockpit UI."""
