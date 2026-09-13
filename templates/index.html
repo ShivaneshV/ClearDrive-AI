@@ -1044,7 +1044,10 @@
             align-items: center;
             gap: 14px;
             cursor: pointer;
-            transition: all 0.22s ease;
+            transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+                        border-color 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+                        background 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+                        box-shadow 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
             position: relative;
             overflow: hidden;
             text-align: left;
@@ -1052,19 +1055,144 @@
 
         .dashcam-feed-btn:hover {
             border-color: var(--cyan-neon);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 243, 255, 0.28);
+            transform: translateY(-3px) scale(1.01);
+            box-shadow: 0 8px 24px rgba(0, 243, 255, 0.32);
             background: rgba(18, 34, 58, 0.95);
         }
 
         .dashcam-feed-btn:active {
-            transform: translateY(0);
+            transform: translateY(0) scale(0.99);
         }
 
         .dashcam-feed-btn.active-dashcam {
             border-color: #00ff66 !important;
             background: linear-gradient(135deg, rgba(0, 255, 102, 0.18), rgba(9, 38, 22, 0.92)) !important;
-            box-shadow: 0 0 24px rgba(0, 255, 102, 0.45) !important;
+            box-shadow: 0 0 28px rgba(0, 255, 102, 0.5) !important;
+            animation: pulse-glow 2.5s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 16px rgba(0, 255, 102, 0.35); }
+            50% { box-shadow: 0 0 28px rgba(0, 255, 102, 0.65); }
+        }
+
+        /* Active Source Ribbon: Instant unambiguous feedback on clicked button */
+        .active-source-ribbon {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+            padding: 9px 14px;
+            background: rgba(10, 20, 34, 0.92);
+            border: 1.5px solid rgba(0, 243, 255, 0.35);
+            border-radius: 8px;
+            box-shadow: inset 0 0 12px rgba(0, 243, 255, 0.08);
+            transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .ribbon-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ribbon-pulse {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #ffaa00;
+            box-shadow: 0 0 8px #ffaa00;
+            animation: blinker 1.2s infinite ease-in-out;
+        }
+
+        .ribbon-pulse.live-green {
+            background: #00ff66 !important;
+            box-shadow: 0 0 10px #00ff66 !important;
+        }
+
+        .ribbon-icon {
+            font-size: 1.3rem;
+        }
+
+        .ribbon-label {
+            font-family: var(--font-mono);
+            font-size: 0.62rem;
+            color: #7b9bb9;
+            letter-spacing: 0.8px;
+            font-weight: 700;
+        }
+
+        .ribbon-title {
+            font-family: var(--font-mono);
+            font-size: 0.86rem;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 0.5px;
+        }
+
+        .ribbon-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 3px;
+        }
+
+        .ribbon-status-tag {
+            font-family: var(--font-mono);
+            font-size: 0.70rem;
+            font-weight: 800;
+            padding: 3px 9px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            display: inline-block;
+        }
+
+        .tag-standby {
+            background: rgba(255, 170, 0, 0.22);
+            color: #ffea00;
+            border: 1px solid rgba(255, 170, 0, 0.6);
+        }
+
+        .tag-live {
+            background: rgba(0, 255, 102, 0.22);
+            color: #00ff66;
+            border: 1px solid rgba(0, 255, 102, 0.6);
+        }
+
+        .ribbon-action-msg {
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            color: #9cb8d4;
+        }
+
+        /* Floating Pill inside Viewport with Smooth Moves glide */
+        .floating-source-pill {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            z-index: 60;
+            background: rgba(10, 20, 35, 0.88);
+            backdrop-filter: blur(8px);
+            border: 1.5px solid var(--cyan-neon);
+            border-radius: 30px;
+            padding: 6px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            font-weight: 800;
+            color: #ffffff;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+            transform: translateY(-40px);
+            opacity: 0;
+            pointer-events: none;
+            transition: transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28), opacity 0.4s ease;
+        }
+
+        .floating-source-pill.show-pill {
+            transform: translateY(0);
+            opacity: 1;
         }
 
         .camera-turn-strip {
@@ -1819,6 +1947,12 @@
                     <span id="bannerTtc" style="color: #ffea00;">TTC: --</span>
                 </div>
 
+                <!-- FLOATING SOURCE TRANSITION NOTIFICATION PILL (SMOOTH MOVES) -->
+                <div class="floating-source-pill" id="floatingSourcePill">
+                    <span id="floatingPillIcon">🚗</span>
+                    <span id="floatingPillText">CAR DASH CAM</span>
+                </div>
+
                 <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream" onclick="handleVideoTap(event)" ondblclick="toggleFullscreen()" ontouchend="handleVideoTap(event)">
 
                 <!-- FLOATING IN-VIDEO CAMERA ORIENTATION & LENS TOOLBAR (Always Visible Over Video) -->
@@ -1957,28 +2091,44 @@
                     <div class="dashcam-btn-icon">🚗</div>
                     <div class="dashcam-btn-info">
                         <span class="dashcam-name">Car Dash Cam</span>
-                        <span class="dashcam-sub">Hardware USB Dashcam / UVC</span>
+                        <span class="dashcam-sub" id="sub-dashcam-car">Hardware USB Dashcam / UVC</span>
                     </div>
-                    <span class="dashcam-pill pill-car">USB PORT 1</span>
+                    <span class="dashcam-pill pill-car" id="pill-dashcam-car">USB PORT 1</span>
                 </button>
 
                 <button class="dashcam-feed-btn" id="btn-dashcam-phone" onclick="selectDevice('phone')">
                     <div class="dashcam-btn-icon">📱</div>
                     <div class="dashcam-btn-info">
                         <span class="dashcam-name">Mobile Dash Cam</span>
-                        <span class="dashcam-sub">Wireless 720p HD Windshield Node</span>
+                        <span class="dashcam-sub" id="sub-dashcam-phone">Wireless 720p HD Windshield Node</span>
                     </div>
-                    <span class="dashcam-pill pill-phone">WIFI / HTTPS</span>
+                    <span class="dashcam-pill pill-phone" id="pill-dashcam-phone">WIFI / HTTPS</span>
                 </button>
 
                 <button class="dashcam-feed-btn" id="btn-dashcam-laptop" onclick="selectDevice('laptop')">
                     <div class="dashcam-btn-icon">💻</div>
                     <div class="dashcam-btn-info">
                         <span class="dashcam-name">Laptop Dash Cam</span>
-                        <span class="dashcam-sub">Auto-Start Physical Laptop Webcam</span>
+                        <span class="dashcam-sub" id="sub-dashcam-laptop">Auto-Start Physical Laptop Webcam</span>
                     </div>
-                    <span class="dashcam-pill pill-laptop">AUTO-CAM</span>
+                    <span class="dashcam-pill pill-laptop" id="pill-dashcam-laptop">AUTO-CAM</span>
                 </button>
+            </div>
+
+            <!-- ACTIVE SOURCE STATUS RIBBON (CRYSTAL CLEAR BUTTON FEEDBACK) -->
+            <div class="active-source-ribbon" id="activeSourceRibbon">
+                <div class="ribbon-left">
+                    <span class="ribbon-pulse" id="ribbonPulse"></span>
+                    <span class="ribbon-icon" id="ribbonIcon">🚗</span>
+                    <div class="ribbon-texts">
+                        <div class="ribbon-label" id="ribbonLabel">ACTIVE CAMERA SOURCE</div>
+                        <div class="ribbon-title" id="ribbonTitle">CAR DASH CAM (HARDWARE USB)</div>
+                    </div>
+                </div>
+                <div class="ribbon-right">
+                    <span class="ribbon-status-tag tag-standby" id="ribbonStatusTag">AWAITING USB CABLE</span>
+                    <span class="ribbon-action-msg" id="ribbonActionMsg">Connect USB cable to your Car Dash Cam</span>
+                </div>
             </div>
 
             <!-- CAMERA TURN & LENS SELECTOR CONTROLS -->
@@ -2341,8 +2491,85 @@
             await setDeviceCameraFacing(newFacing);
         }
 
+        function showFloatingSourcePill(icon, text) {
+            const pill = document.getElementById('floatingSourcePill');
+            const iconEl = document.getElementById('floatingPillIcon');
+            const textEl = document.getElementById('floatingPillText');
+            if (!pill || !iconEl || !textEl) return;
+            iconEl.textContent = icon;
+            textEl.textContent = text;
+            pill.classList.add('show-pill');
+            clearTimeout(window._pillHideTimer);
+            window._pillHideTimer = setTimeout(() => {
+                pill.classList.remove('show-pill');
+            }, 2800);
+        }
+
+        function updateSourceRibbonUI(source, statusMsg = null, isLive = false) {
+            const ribbon = document.getElementById('activeSourceRibbon');
+            const rPulse = document.getElementById('ribbonPulse');
+            const rIcon = document.getElementById('ribbonIcon');
+            const rTitle = document.getElementById('ribbonTitle');
+            const rTag = document.getElementById('ribbonStatusTag');
+            const rMsg = document.getElementById('ribbonActionMsg');
+            if (!ribbon) return;
+
+            if (source === 'car') {
+                rIcon.textContent = '🚗';
+                rTitle.textContent = 'CAR DASH CAM (HARDWARE USB)';
+                if (isLive) {
+                    rPulse.className = 'ribbon-pulse live-green';
+                    rTag.className = 'ribbon-status-tag tag-live';
+                    rTag.textContent = 'ONLINE (USB)';
+                    rMsg.textContent = statusMsg || 'Hardware USB Dashcam streaming to neural perception engine';
+                } else {
+                    rPulse.className = 'ribbon-pulse';
+                    rTag.className = 'ribbon-status-tag tag-standby';
+                    rTag.textContent = 'AWAITING USB CABLE';
+                    rMsg.textContent = statusMsg || 'Please connect USB cable of your Car Dash Cam';
+                }
+            } else if (source === 'phone') {
+                rIcon.textContent = '📱';
+                rTitle.textContent = 'MOBILE DASH CAM (WIRELESS NODE)';
+                if (isLive) {
+                    rPulse.className = 'ribbon-pulse live-green';
+                    rTag.className = 'ribbon-status-tag tag-live';
+                    rTag.textContent = 'ONLINE (ROAD CAM)';
+                    rMsg.textContent = statusMsg || 'Mobile windshield camera active @ 30 FPS';
+                } else {
+                    rPulse.className = 'ribbon-pulse';
+                    rTag.className = 'ribbon-status-tag tag-standby';
+                    rTag.textContent = 'AWAITING PHONE STREAM';
+                    rMsg.textContent = statusMsg || 'Connect phone to same Wi-Fi and open /camera';
+                }
+            } else if (source === 'laptop') {
+                rIcon.textContent = '💻';
+                rTitle.textContent = 'LAPTOP DASH CAM (BUILT-IN WEBCAM)';
+                if (isLive) {
+                    rPulse.className = 'ribbon-pulse live-green';
+                    rTag.className = 'ribbon-status-tag tag-live';
+                    rTag.textContent = 'ONLINE (WEBCAM)';
+                    rMsg.textContent = statusMsg || 'Direct built-in hardware webcam active @ 30+ FPS';
+                } else {
+                    rPulse.className = 'ribbon-pulse';
+                    rTag.className = 'ribbon-status-tag tag-standby';
+                    rTag.textContent = 'INITIALIZING WEBCAM';
+                    rMsg.textContent = statusMsg || 'Starting built-in laptop webcam...';
+                }
+            } else {
+                rIcon.textContent = '🎬';
+                rTitle.textContent = `BENCHMARK SCENARIO: ${(source || '').toUpperCase()}`;
+                rPulse.className = 'ribbon-pulse live-green';
+                rTag.className = 'ribbon-status-tag tag-live';
+                rTag.textContent = 'DEMO PLAYBACK';
+                rMsg.textContent = 'Autonomous multi-hazard evaluation loop';
+            }
+        }
+
         async function selectDevice(device) {
-            // 1. Visually activate button
+            playChime();
+
+            // 1. Visually activate button with smooth moves
             ['car', 'phone', 'laptop'].forEach(d => {
                 const btn = document.getElementById('btn-dashcam-' + d);
                 if (btn) {
@@ -2357,38 +2584,57 @@
 
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 820);
 
-            // 3. Hardware Camera Auto-Activation
-            if (device === 'laptop') {
+            // 3. Clear button dynamic subtitles/pills and assign dedicated state
+            const subCar = document.getElementById('sub-dashcam-car');
+            const pillCar = document.getElementById('pill-dashcam-car');
+            const subPhone = document.getElementById('sub-dashcam-phone');
+            const pillPhone = document.getElementById('pill-dashcam-phone');
+            const subLaptop = document.getElementById('sub-dashcam-laptop');
+            const pillLaptop = document.getElementById('pill-dashcam-laptop');
+
+            if (device === 'car') {
+                stopLaptopWebcam();
+                if (subCar) subCar.textContent = '🔍 Scanning USB Ports...';
+                if (pillCar) { pillCar.textContent = 'AWAITING USB'; pillCar.className = 'dashcam-pill pill-car'; }
+                updateSourceRibbonUI('car', 'Please connect USB cable of your Car Dash Cam', false);
+                showFloatingSourcePill('🚗', 'CAR DASH CAM: Awaiting USB Cable');
+                addTerminalLog('HARDWARE', '🚗 CAR DASH CAM: Scanning USB ports... Please connect USB cable');
+            } else if (device === 'phone') {
                 if (isMobile) {
+                    currentCameraFacing = 'environment';
+                    updateCameraFacingUI();
+                    if (subPhone) subPhone.textContent = '🟢 Phone Road Camera Active';
+                    if (pillPhone) { pillPhone.textContent = 'ACTIVE'; pillPhone.className = 'dashcam-pill pill-phone'; }
+                    updateSourceRibbonUI('phone', 'Phone windshield road camera active', true);
+                    showFloatingSourcePill('📱', 'MOBILE DASH CAM: Road Cam Active');
+                    await activateDeviceCamera('environment');
+                    addTerminalLog('HARDWARE', '📱 Mobile Road Camera ACTIVE // 30 FPS Stream');
+                } else {
+                    stopLaptopWebcam();
+                    if (subPhone) subPhone.textContent = '📡 Awaiting Phone Stream (Wi-Fi)';
+                    if (pillPhone) { pillPhone.textContent = 'WIFI / HTTPS'; pillPhone.className = 'dashcam-pill pill-phone'; }
+                    updateSourceRibbonUI('phone', 'Open /camera on phone to stream wirelessly', false);
+                    showFloatingSourcePill('📱', 'MOBILE DASH CAM: Awaiting Phone Stream');
+                    addTerminalLog('DASHCAM-CTL', '📱 MOBILE DASH CAM: Awaiting connection from phone (/camera or Wi-Fi)');
+                }
+            } else if (device === 'laptop') {
+                if (isMobile) {
+                    currentCameraFacing = 'user';
+                    updateCameraFacingUI();
+                    if (subLaptop) subLaptop.textContent = '🟢 Cabin View (Front Camera)';
+                    if (pillLaptop) { pillLaptop.textContent = 'CABIN'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
+                    updateSourceRibbonUI('laptop', 'Mobile front cabin camera active', true);
+                    showFloatingSourcePill('🤳', 'CABIN VIEW: Front Camera Active');
                     await activateDeviceCamera('user');
                 } else {
                     stopLaptopWebcam(); // Direct native hardware capture on PC (Cam 0 @ 40+ FPS)
+                    if (subLaptop) subLaptop.textContent = '🟢 Built-in Laptop Webcam Active';
+                    if (pillLaptop) { pillLaptop.textContent = 'ONLINE'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
+                    updateSourceRibbonUI('laptop', 'Built-in laptop webcam active @ 30+ FPS', true);
+                    showFloatingSourcePill('💻', 'LAPTOP DASH CAM: Built-in Webcam Active');
+                    addTerminalLog('HARDWARE', '💻 LAPTOP DASH CAM: Built-in webcam activated');
                 }
-            } else if (device === 'phone') {
-                if (isMobile) {
-                    // Mobile user: instantly turn on back/road camera on this mobile device
-                    currentCameraFacing = 'environment';
-                    updateCameraFacingUI();
-                    await activateDeviceCamera('environment');
-                    addTerminalLog('HARDWARE', '📱 Mobile Road Camera ACTIVE // 30 FPS Pipelined Stream');
-                } else {
-                    stopLaptopWebcam();
-                    // Desktop PC user: check if USB C-Type phone or wireless node is active
-                    fetch('/api/telemetry')
-                        .then(r => r.json())
-                        .then(t => {
-                            if (t.source !== 'phone' || !t.current_video || !t.current_video.includes('LIVE')) {
-                                openMobileModal();
-                            }
-                        })
-                        .catch(() => openMobileModal());
-                }
-            } else if (device === 'car') {
-                stopLaptopWebcam(); // Direct native hardware capture on Cam 1 (USB / C-Type Cable @ 30 FPS)
-            } else {
-                stopLaptopWebcam();
             }
-
 
             // 4. Update backend source settings
             fetch('/api/settings', {
@@ -2398,17 +2644,14 @@
             })
             .then(res => res.json())
             .then(d => {
-                const labelMap = {
-                    'car': 'CAR DASH CAM (HARDWARE USB)',
-                    'phone': 'MOBILE DASH CAM (WIRELESS NODE)',
-                    'laptop': 'LAPTOP DASH CAM (BUILT-IN WEBCAM)'
-                };
-                addTerminalLog('DASHCAM-CTL', `Feed locked to: ${labelMap[device] || device.toUpperCase()}`);
-                if (device === 'car') {
-                    addTerminalLog('HARDWARE', '🔍 Scanning USB ports... Please connect USB cable of your Car Dash Cam');
-                }
+                // 5. Zero-Lag Stream Reset: Cleanly disconnect existing MJPEG connection to avoid browser lag
                 const sImg = document.getElementById('videoStream');
-                if (sImg) sImg.src = '/video_feed?t=' + Date.now();
+                if (sImg) {
+                    sImg.src = '';
+                    setTimeout(() => {
+                        sImg.src = '/video_feed?t=' + Date.now();
+                    }, 50);
+                }
             })
             .catch(err => console.error(err));
         }
@@ -2664,6 +2907,23 @@
                 if (btn) btn.classList.remove('active-dashcam');
             });
 
+            // Reset subtitles and pills to default
+            const subCar = document.getElementById('sub-dashcam-car');
+            const pillCar = document.getElementById('pill-dashcam-car');
+            const subPhone = document.getElementById('sub-dashcam-phone');
+            const pillPhone = document.getElementById('pill-dashcam-phone');
+            const subLaptop = document.getElementById('sub-dashcam-laptop');
+            const pillLaptop = document.getElementById('pill-dashcam-laptop');
+            if (subCar) subCar.textContent = 'Hardware USB Dashcam / UVC';
+            if (pillCar) { pillCar.textContent = 'USB PORT 1'; pillCar.className = 'dashcam-pill pill-car'; }
+            if (subPhone) subPhone.textContent = 'Wireless 720p HD Windshield Node';
+            if (pillPhone) { pillPhone.textContent = 'WIFI / HTTPS'; pillPhone.className = 'dashcam-pill pill-phone'; }
+            if (subLaptop) subLaptop.textContent = 'Auto-Start Physical Laptop Webcam';
+            if (pillLaptop) { pillLaptop.textContent = 'AUTO-CAM'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
+
+            updateSourceRibbonUI(val, 'Scenario playback engaged', true);
+            showFloatingSourcePill('🎬', `SCENARIO: ${val.toUpperCase()}`);
+
             fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2673,7 +2933,12 @@
             .then(d => {
                 addTerminalLog('SRC-SWITCH', `Benchmark scenario loaded: ${val.toUpperCase()}`);
                 const sImg = document.getElementById('videoStream');
-                if (sImg) sImg.src = '/video_feed?t=' + Date.now();
+                if (sImg) {
+                    sImg.src = '';
+                    setTimeout(() => {
+                        sImg.src = '/video_feed?t=' + Date.now();
+                    }, 50);
+                }
             })
             .catch(e => console.error(e));
         }
@@ -3786,7 +4051,7 @@
                     updateFeatureButtons(data.features);
                 }
 
-                // Sync Source Dropdown and Hardware Dashcam Buttons
+                // Sync Source Dropdown, Hardware Dashcam Buttons, Subtitles & Ribbon
                 if (data.source) {
                     const videoSelectEl = document.getElementById('videoSelect');
                     if (videoSelectEl && videoSelectEl.value !== data.source) {
@@ -3800,6 +4065,47 @@
                             else b.classList.remove('active-dashcam');
                         }
                     });
+
+                    // Dynamic Subtext & Pill Synchronization
+                    const subCar = document.getElementById('sub-dashcam-car');
+                    const pillCar = document.getElementById('pill-dashcam-car');
+                    const subPhone = document.getElementById('sub-dashcam-phone');
+                    const pillPhone = document.getElementById('pill-dashcam-phone');
+                    const subLaptop = document.getElementById('sub-dashcam-laptop');
+                    const pillLaptop = document.getElementById('pill-dashcam-laptop');
+
+                    const curVid = data.current_video || '';
+                    if (data.source === 'car') {
+                        if (curVid.includes('PLEASE CONNECT') || curVid.includes('WAITING') || curVid.includes('STANDBY')) {
+                            if (subCar) subCar.textContent = '⚠️ PLEASE CONNECT USB CABLE';
+                            if (pillCar) { pillCar.textContent = 'NO USB CABLE'; pillCar.className = 'dashcam-pill pill-car'; }
+                            updateSourceRibbonUI('car', 'Please connect USB cable to your Car Dash Cam', false);
+                        } else {
+                            if (subCar) subCar.textContent = '🟢 Live USB Dashcam Connected';
+                            if (pillCar) { pillCar.textContent = 'ONLINE'; pillCar.className = 'dashcam-pill pill-car'; }
+                            updateSourceRibbonUI('car', curVid, true);
+                        }
+                    } else if (data.source === 'phone') {
+                        if (curVid.includes('LIVE')) {
+                            if (subPhone) subPhone.textContent = '🟢 Phone Road Camera Active';
+                            if (pillPhone) { pillPhone.textContent = 'ONLINE'; pillPhone.className = 'dashcam-pill pill-phone'; }
+                            updateSourceRibbonUI('phone', curVid, true);
+                        } else {
+                            if (subPhone) subPhone.textContent = '📡 Awaiting Phone Stream (Wi-Fi)';
+                            if (pillPhone) { pillPhone.textContent = 'WIFI / HTTPS'; pillPhone.className = 'dashcam-pill pill-phone'; }
+                            updateSourceRibbonUI('phone', 'Connect phone to same Wi-Fi and open /camera', false);
+                        }
+                    } else if (data.source === 'laptop') {
+                        if (curVid.includes('LIVE')) {
+                            if (subLaptop) subLaptop.textContent = '🟢 Built-in Laptop Webcam Active';
+                            if (pillLaptop) { pillLaptop.textContent = 'ONLINE'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
+                            updateSourceRibbonUI('laptop', curVid, true);
+                        } else {
+                            if (subLaptop) subLaptop.textContent = '💻 Laptop Webcam Standby';
+                            if (pillLaptop) { pillLaptop.textContent = 'STANDBY'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
+                            updateSourceRibbonUI('laptop', 'Webcam initializing...', false);
+                        }
+                    }
                 }
 
                 // Perception Chips (Guarded against DOM thrashing to eliminate layout lag)
@@ -3828,7 +4134,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=6').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=7').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app

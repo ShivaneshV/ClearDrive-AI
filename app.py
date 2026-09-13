@@ -227,7 +227,7 @@ def check_external_usb_hardware():
     """
     global external_usb_cam_connected, external_usb_cam_name, external_usb_cam_index, last_usb_scan_time
     now = time.time()
-    if now - last_usb_scan_time < 1.5:
+    if now - last_usb_scan_time < 3.5:
         return external_usb_cam_connected
 
     last_usb_scan_time = now
@@ -275,7 +275,7 @@ def usb_detector_daemon():
             check_external_usb_hardware()
         except Exception:
             pass
-        time.sleep(1.5)
+        time.sleep(3.5)
 
 threading.Thread(target=usb_detector_daemon, daemon=True).start()
 
@@ -398,12 +398,15 @@ class ThreadedCamera:
         self.lock = threading.Lock()
         self.running = True
         self.last_frame_time = 0.0
+        self.last_open_attempt = 0.0
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.thread.start()
 
     def _open_device(self):
         try:
-            c = cv2.VideoCapture(self.src)
+            c = cv2.VideoCapture(self.src, cv2.CAP_DSHOW)
+            if not c.isOpened():
+                c = cv2.VideoCapture(self.src)
             if c.isOpened():
                 c.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 c.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
@@ -416,6 +419,11 @@ class ThreadedCamera:
     def _capture_loop(self):
         while self.running:
             if self.cap is None or not self.cap.isOpened():
+                now = time.time()
+                if now - self.last_open_attempt < 2.5:
+                    time.sleep(0.1)
+                    continue
+                self.last_open_attempt = now
                 self.cap = self._open_device()
                 if self.cap is None or not self.cap.isOpened():
                     time.sleep(0.5)
@@ -426,6 +434,7 @@ class ThreadedCamera:
                 with self.lock:
                     self.latest_frame = frame
                     self.last_frame_time = time.time()
+                time.sleep(0.005)
             else:
                 time.sleep(0.01)
 
@@ -457,6 +466,8 @@ def get_threaded_cam(idx):
 def get_external_usb_threaded_cam():
     """Returns ThreadedCamera for the connected external USB Dashcam, testing index 1 and 2."""
     global active_hw_cameras, external_usb_cam_index
+    if not external_usb_cam_connected:
+        return None
     idx = external_usb_cam_index
     c = get_threaded_cam(idx)
     ok, f = c.read()
@@ -520,7 +531,7 @@ def process_video():
         is_standby_guide = False
 
         # -------------------------------------------------------------
-        # Case 1: Mobile Dash Cam (Wireless Phone Node via /camera or USB C-Type Cable)
+        # Case 1: Mobile Dash Cam (Wireless Phone Node via /camera or Mobile Browser)
         # -------------------------------------------------------------
         if src in ['phone', 'mobile']:
             with lock:
@@ -528,13 +539,6 @@ def process_video():
                 if has_phone:
                     raw_frame = phone_frame_buffer.copy()
                     display_clip = "📱 LIVE MOBILE DASH CAM (WIRELESS)"
-
-            # Auto-detect if phone is connected via C-type USB cable (Cam 1)
-            if raw_frame is None:
-                ok1, f1 = get_threaded_cam(1).read()
-                if ok1 and f1 is not None:
-                    raw_frame = f1
-                    display_clip = "📱 LIVE MOBILE DASH CAM (USB C-TYPE)"
 
             if raw_frame is None:
                 raw_frame = make_device_standby_frame('phone', get_local_ip())
@@ -547,9 +551,9 @@ def process_video():
         elif src in ['laptop', 'cam0', '0']:
             # Priority 1: Direct native hardware webcam (0ms lag, 30-40+ FPS)
             ok0, f0 = get_threaded_cam(0).read()
-            if ok0 and f0 is not None:
+            if ok0 and f0 is not None and f0.size > 0:
                 raw_frame = f0
-                display_clip = "💻 LIVE LAPTOP DASH CAM (DIRECT HW)"
+                display_clip = "💻 LIVE LAPTOP DASH CAM (BUILT-IN)"
             else:
                 # Priority 2: Browser capture upload
                 with lock:
@@ -568,9 +572,12 @@ def process_video():
         # -------------------------------------------------------------
         elif src in ['car', 'cam1', '1']:
             if external_usb_cam_connected:
-                # Actual external USB Dashcam is connected to computer!
+                # Actual external USB Dashcam is physically connected to computer!
                 cam_obj = get_external_usb_threaded_cam()
-                ok_usb, frame_usb = cam_obj.read()
+                ok_usb = False
+                frame_usb = None
+                if cam_obj is not None:
+                    ok_usb, frame_usb = cam_obj.read()
                 if ok_usb and frame_usb is not None and frame_usb.size > 0:
                     raw_frame = frame_usb
                     display_clip = f"🚗 LIVE CAR DASH CAM ({external_usb_cam_name or 'USB'})"
@@ -584,7 +591,6 @@ def process_video():
                 raw_frame = make_device_standby_frame('car', get_local_ip(), status_msg='PLEASE CONNECT USB CABLE')
                 is_standby_guide = True
                 display_clip = "⚠️ PLEASE CONNECT USB CABLE"
-
 
         # -------------------------------------------------------------
         # Case 4: Specific Video Selected from Dropdown
@@ -634,6 +640,15 @@ def process_video():
 
         if is_standby_guide:
             # Standby connection frame: bypass YOLO/lanes so instructions remain 100% crisp and readable
+            if src in ['car', 'cam1', '1']:
+                standby_enh = ["🚗 CAR DASH CAM", "⚠️ PLEASE CONNECT USB CABLE"]
+            elif src in ['phone', 'mobile']:
+                standby_enh = ["📱 MOBILE DASH CAM", "AWAITING PHONE STREAM (WI-FI)"]
+            elif src in ['laptop', 'cam0', '0']:
+                standby_enh = ["💻 LAPTOP DASH CAM", "AWAITING WEBCAM PERMISSION"]
+            else:
+                standby_enh = ["DEVICE STANDBY", "AUTO-CONNECT ARMED"]
+
             with lock:
                 current_frame = raw_frame
                 frame_seq_id += 1
@@ -663,7 +678,7 @@ def process_video():
                     "heading": round(active_heading, 1),
                     "elevation_m": int(active_alt),
                     "road_name": active_road,
-                    "enhancements": ["DEVICE STANDBY", "AUTO-CONNECT ARMED"],
+                    "enhancements": standby_enh,
                     "current_video": display_clip,
                     "mode": active_mode,
                     "features": active_features_dict,
@@ -713,20 +728,21 @@ def process_video():
 
         if src in ['phone', 'mobile']:
             display_clip = "📱 LIVE MOBILE DASH CAM"
+            tele["enhancements"] = ["📱 MOBILE DASH CAM ACTIVE", "WIRELESS HD WINDSHIELD NODE"]
         elif src in ['car', 'cam1', '1']:
             if is_standby_guide or not external_usb_cam_connected:
                 display_clip = "⚠️ PLEASE CONNECT USB CABLE"
+                tele["enhancements"] = ["🚗 CAR DASH CAM", "⚠️ PLEASE CONNECT USB CABLE"]
             else:
                 display_clip = f"🚗 LIVE CAR DASH CAM ({external_usb_cam_name or 'USB'})"
+                tele["enhancements"] = ["🚗 CAR DASH CAM ACTIVE", f"HARDWARE USB ({external_usb_cam_name or 'UVC'})"]
         elif src in ['laptop', 'cam0', '0']:
             display_clip = "💻 LIVE LAPTOP DASH CAM"
+            tele["enhancements"] = ["💻 LAPTOP DASH CAM ACTIVE", "BUILT-IN HARDWARE WEBCAM"]
         elif src in PLAYLIST or str(src).endswith('.mp4'):
             display_clip = f"🎥 SELECTED CLIP: {src}"
         else:
             display_clip = f"🔄 PLAYLIST: {PLAYLIST[playlist_index]}"
-
-        if src in ['car', 'cam1', '1'] and (is_standby_guide or not external_usb_cam_connected):
-            tele["enhancements"] = ["⚠️ PLEASE CONNECT USB CABLE", "AWAITING USB DASHCAM WIRE"]
 
         v2v_status_str = f"{active_v2v_payload['event']} ({active_v2v_payload['distance']})" if active_v2v_payload else "V2V MESH ACTIVE // LISTENING"
 
