@@ -1657,9 +1657,9 @@
                     <div class="nav-layer-btns">
                         <button class="nav-layer-btn" id="btn-layer-sat" onclick="switchMapLayer('satellite')">🛰️ SAT</button>
                         <button class="nav-layer-btn" id="btn-layer-traffic" onclick="switchMapLayer('traffic')">🚦 TRAFFIC</button>
-                        <button class="nav-layer-btn" id="btn-layer-road" onclick="switchMapLayer('roadmap')">🗺️ ROAD</button>
+                        <button class="nav-layer-btn layer-active" id="btn-layer-road" onclick="switchMapLayer('roadmap')">🗺️ ROAD</button>
                         <button class="nav-layer-btn" id="btn-layer-terrain" onclick="switchMapLayer('terrain')">⛰️ TERRAIN</button>
-                        <button class="nav-layer-btn layer-active" id="btn-layer-dark" onclick="switchMapLayer('dark')">🕶️ CYBER</button>
+                        <button class="nav-layer-btn" id="btn-layer-dark" onclick="switchMapLayer('dark')">🕶️ CYBER</button>
                     </div>
                 </div>
 
@@ -1984,7 +1984,7 @@
         // Navigation & Live GPS State
         let navMap = null;
         let mapLayers = {};
-        let currentMapLayer = 'dark';
+        let currentMapLayer = 'roadmap';
         let vehicleMarker = null;
         let routePolyline = null;
         let destMarker = null;
@@ -2551,14 +2551,15 @@
                     attributionControl: false
                 });
 
-                // Google & Cyber Dark Tile Layers
-                mapLayers.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
-                mapLayers.satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
-                mapLayers.traffic = L.tileLayer('https://mt1.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}', { maxZoom: 20 });
+                // Google Maps & Free Dark Tile Layers (100% Free, No API Keys Required, Zero Watermarks)
                 mapLayers.roadmap = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20 });
+                mapLayers.traffic = L.tileLayer('https://mt1.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}', { maxZoom: 20 });
+                mapLayers.satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
                 mapLayers.terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { maxZoom: 20 });
+                mapLayers.dark = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16 });
 
-                mapLayers.dark.addTo(navMap);
+                // Default to Google Maps Official Roadmap
+                mapLayers.roadmap.addTo(navMap);
 
                 // Vehicle Pulsing Cyber Marker
                 const vehicleIcon = L.divIcon({
