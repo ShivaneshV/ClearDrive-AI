@@ -2643,16 +2643,6 @@
                 body: JSON.stringify({ source: device })
             })
             .then(res => res.json())
-            .then(d => {
-                // 5. Zero-Lag Stream Reset: Cleanly disconnect existing MJPEG connection to avoid browser lag
-                const sImg = document.getElementById('videoStream');
-                if (sImg) {
-                    sImg.src = '';
-                    setTimeout(() => {
-                        sImg.src = '/video_feed?t=' + Date.now();
-                    }, 50);
-                }
-            })
             .catch(err => console.error(err));
         }
 
@@ -2945,13 +2935,6 @@
             .then(res => res.json())
             .then(d => {
                 addTerminalLog('SRC-SWITCH', `Benchmark scenario loaded: ${val.toUpperCase()}`);
-                const sImg = document.getElementById('videoStream');
-                if (sImg) {
-                    sImg.src = '';
-                    setTimeout(() => {
-                        sImg.src = '/video_feed?t=' + Date.now();
-                    }, 50);
-                }
             })
             .catch(e => console.error(e));
         }
@@ -4147,7 +4130,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=8').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=9').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
@@ -4241,19 +4224,16 @@
 
             // Live Stream Reconnection Watchdog (Cold-boot recovery)
             const streamImg = document.getElementById('videoStream');
+            let streamReconnectTimeout = null;
             if (streamImg) {
                 streamImg.onerror = function() {
-                    console.warn("[Stream Watchdog] Feed disconnected or cold boot. Retrying in 1.2s...");
-                    setTimeout(() => {
+                    if (streamReconnectTimeout) return;
+                    console.warn("[Stream Watchdog] Feed disconnected. Retrying in 2s...");
+                    streamReconnectTimeout = setTimeout(() => {
+                        streamReconnectTimeout = null;
                         streamImg.src = '/video_feed?t=' + Date.now();
-                    }, 1200);
+                    }, 2000);
                 };
-                // Auto-kick if initial connection timed out
-                setTimeout(() => {
-                    if (!streamImg.complete || streamImg.naturalWidth === 0) {
-                        streamImg.src = '/video_feed?t=' + Date.now();
-                    }
-                }, 2000);
             }
         });
     </script>

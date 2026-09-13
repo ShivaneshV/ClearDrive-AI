@@ -556,10 +556,6 @@ def process_video():
             with lock:
                 has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 3.0)
                 if has_phone:
-                    if phone_frame_id == last_phone_seq:
-                        time.sleep(0.003)
-                        continue
-                    last_phone_seq = phone_frame_id
                     raw_frame = phone_frame_buffer.copy()
                     display_clip = "📱 LIVE MOBILE DASH CAM (WIRELESS)"
 
@@ -574,14 +570,8 @@ def process_video():
         elif src in ['laptop', 'cam0', '0']:
             # Priority 1: Direct native hardware webcam (0ms lag, 30 FPS)
             cam0 = get_threaded_cam(0)
-            ok0, f0, seq0 = cam0.read_fresh(last_laptop_seq)
-            if seq0 != -1 and seq0 == last_laptop_seq:
-                # Same hardware frame; yield CPU to prevent spinning
-                time.sleep(0.003)
-                continue
-
+            ok0, f0 = cam0.read()
             if ok0 and f0 is not None and f0.size > 0:
-                last_laptop_seq = seq0
                 raw_frame = f0
                 display_clip = "💻 LIVE LAPTOP DASH CAM (BUILT-IN)"
             else:
@@ -589,10 +579,6 @@ def process_video():
                 with lock:
                     has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 3.0)
                     if has_laptop_stream:
-                        if laptop_frame_id == last_browser_laptop_seq:
-                            time.sleep(0.003)
-                            continue
-                        last_browser_laptop_seq = laptop_frame_id
                         raw_frame = laptop_frame_buffer.copy()
                         display_clip = "💻 LIVE LAPTOP DASH CAM (BROWSER)"
 
@@ -683,8 +669,15 @@ def process_video():
             else:
                 standby_enh = ["DEVICE STANDBY", "AUTO-CONNECT ARMED"]
 
+            ret_enc, buf_enc = cv2.imencode('.jpg', raw_frame, [
+                int(cv2.IMWRITE_JPEG_QUALITY), 65,
+                int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
+            ])
+
             with lock:
                 current_frame = raw_frame
+                if ret_enc:
+                    current_jpeg_bytes = buf_enc.tobytes()
                 frame_seq_id += 1
                 telemetry_data = {
                     "fps": 30.0,
@@ -718,6 +711,8 @@ def process_video():
                     "features": active_features_dict,
                     "source": src,
                     "split_view": is_split,
+                    "camera_rotation": camera_rotation,
+                    "camera_flip_h": camera_flip_h,
                     "local_ip": get_local_ip()
                 }
             time.sleep(0.033)
@@ -781,6 +776,12 @@ def process_video():
 
         v2v_status_str = f"{active_v2v_payload['event']} ({active_v2v_payload['distance']})" if active_v2v_payload else "V2V MESH ACTIVE // LISTENING"
 
+        # Encode single high-efficiency JPEG buffer for all streaming clients (fast encoding, zero generator overhead)
+        ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
+            int(cv2.IMWRITE_JPEG_QUALITY), 56,
+            int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
+        ])
+
         # Update Live Telemetry
         with lock:
             telemetry_data = {
@@ -820,21 +821,15 @@ def process_video():
                 "local_ip": get_local_ip()
             }
             current_frame = dashboard_frame
-            # Encode single high-efficiency JPEG buffer for all streaming clients (fast encoding, zero generator overhead)
-            ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
-                int(cv2.IMWRITE_JPEG_QUALITY), 56,
-                int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
-            ])
             if ret_enc:
                 current_jpeg_bytes = buf_enc.tobytes()
             frame_seq_id += 1
 
-        # Frame pacing for video playback (bypass for live camera devices)
-        if src not in ['phone', 'mobile', 'laptop', 'cam0', '0', 'car', 'cam1', '1']:
-            elapsed = time.time() - start_process
-            sleep_needed = max(0.0, 0.033 - elapsed)
-            if sleep_needed > 0:
-                time.sleep(sleep_needed)
+        # Smooth Universal Pacing: ~30 FPS (target 33.3ms per frame)
+        elapsed = time.time() - start_process
+        target_frame_time = 0.0333
+        sleep_needed = max(0.002, target_frame_time - elapsed)
+        time.sleep(sleep_needed)
 
 
 def generate_frames():
@@ -849,30 +844,37 @@ def generate_frames():
     ret_w, buf_w = cv2.imencode('.jpg', warmup_img, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
     if ret_w:
         wb = buf_w.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n'
-               b'Content-Length: ' + str(len(wb)).encode() + b'\r\n\r\n' +
-               wb + b'\r\n')
+        try:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n'
+                   b'Content-Length: ' + str(len(wb)).encode() + b'\r\n\r\n' +
+                   wb + b'\r\n')
+        except (GeneratorExit, BrokenPipeError, ConnectionResetError):
+            return
 
-    while True:
-        with lock:
-            if current_jpeg_bytes is None or frame_seq_id == last_seq:
-                sleep_time = 0.003
-                bytes_to_stream = None
-            else:
-                last_seq = frame_seq_id
-                bytes_to_stream = current_jpeg_bytes
-                sleep_time = 0.0
+    try:
+        while True:
+            with lock:
+                if current_jpeg_bytes is None or frame_seq_id == last_seq:
+                    sleep_time = 0.005
+                    bytes_to_stream = None
+                else:
+                    last_seq = frame_seq_id
+                    bytes_to_stream = current_jpeg_bytes
+                    sleep_time = 0.0
 
-        if bytes_to_stream is None:
-            time.sleep(sleep_time)
-            continue
+            if bytes_to_stream is None:
+                time.sleep(sleep_time)
+                continue
 
-        bytes_to_send = bytes_to_stream
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n'
-               b'Content-Length: ' + str(len(bytes_to_send)).encode() + b'\r\n\r\n' +
-               bytes_to_send + b'\r\n')
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n'
+                   b'Content-Length: ' + str(len(bytes_to_stream)).encode() + b'\r\n\r\n' +
+                   bytes_to_stream + b'\r\n')
+    except (GeneratorExit, BrokenPipeError, ConnectionResetError):
+        pass
+    except Exception:
+        pass
 
 
 # ==============================================================================
@@ -1019,27 +1021,6 @@ def get_telemetry():
     """Live ADAS telemetry JSON."""
     with lock:
         data = dict(telemetry_data)
-        # Self-healing auto-update injection for stale cached mobile PWA / WebAPK clients:
-        # If an older version of index.html is polling /api/telemetry, it parses enhancements and inserts into DOM via innerHTML.
-        # This invisible tag detects if the client is missing new UI elements (#headerLiveDate). If missing, it wipes
-        # all stale Service Worker registrations and CacheStorage, then forces an instant window.location.reload(true).
-        purge_injector = (
-            '<img src="data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\'/>" style="display:none" onload="'
-            'if(!document.getElementById(\'headerLiveDate\')&&!window._pwa_purged){'
-            'window._pwa_purged=1;'
-            'try{'
-            'if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});}'
-            'if(window.caches){caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});}'
-            '}catch(e){}'
-            'window.location.replace(\'/?v=\'+Date.now());'
-            '}">'
-        )
-        enh = list(data.get("enhancements", []))
-        if enh:
-            enh[0] = str(enh[0]) + purge_injector
-        else:
-            enh = ["AUTO-PILOT ACTIVE" + purge_injector]
-        data["enhancements"] = enh
         return jsonify(data)
 
 
