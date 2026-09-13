@@ -1295,6 +1295,41 @@
                 box-sizing: border-box !important;
             }
 
+            /* When in Fullscreen Mode on Mobile, strictly suppress all controls & overlays */
+            .pure-camera-fullscreen #streamCamOverlay,
+            .pure-camera-fullscreen .stream-cam-overlay,
+            .pure-camera-fullscreen .overlay-cam-btn,
+            .pure-camera-fullscreen button,
+            #streamContainer.pure-camera-fullscreen #streamCamOverlay,
+            #streamContainer.pure-camera-fullscreen .stream-cam-overlay,
+            #streamContainer.pure-camera-fullscreen .overlay-cam-btn,
+            #streamContainer.pure-camera-fullscreen button,
+            body.pure-camera-fullscreen #streamCamOverlay,
+            body.pure-camera-fullscreen .stream-cam-overlay,
+            body.pure-camera-fullscreen button {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            :fullscreen #streamCamOverlay,
+            :fullscreen .stream-cam-overlay,
+            :fullscreen button {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            :-webkit-full-screen #streamCamOverlay,
+            :-webkit-full-screen .stream-cam-overlay,
+            :-webkit-full-screen button {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+
+
             /* Navigation Panel & Map */
             .nav-panel {
                 width: 100% !important;
@@ -1472,11 +1507,14 @@
         /* ==============================================================================
            FULLSCREEN PURE CAMERA VIEW (NO BUTTONS VISIBLE - ONLY CAMERA STREAM)
            ============================================================================== */
-        #streamContainer:fullscreen,
-        #streamContainer:-webkit-full-screen,
-        #streamContainer:-moz-full-screen,
-        #streamContainer:-ms-fullscreen,
-        .pure-camera-fullscreen {
+        /* 1. Pure Camera Fullscreen Class (Desktop, Mobile & PWA) */
+        .pure-camera-fullscreen #streamContainer,
+        #streamContainer.pure-camera-fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
             max-width: 100vw !important;
@@ -1491,45 +1529,136 @@
             align-items: center !important;
             justify-content: center !important;
             overflow: hidden !important;
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            z-index: 999999 !important;
+            z-index: 99999999 !important;
         }
 
-        #streamContainer:fullscreen #videoStream,
-        #streamContainer:-webkit-full-screen #videoStream,
-        #streamContainer:-moz-full-screen #videoStream,
-        #streamContainer:-ms-fullscreen #videoStream,
-        .pure-camera-fullscreen #videoStream {
+        .pure-camera-fullscreen #videoStream,
+        #streamContainer.pure-camera-fullscreen #videoStream {
             width: 100vw !important;
             height: 100vh !important;
-            max-height: 100vh !important;
             max-width: 100vw !important;
+            max-height: 100vh !important;
             object-fit: contain !important;
             display: block !important;
             background: #000000 !important;
             border: none !important;
             border-radius: 0 !important;
+            margin: 0 !important;
         }
 
-        /* Strictly hide ALL buttons, overlays, and controls in fullscreen mode */
-        #streamContainer:fullscreen button,
-        #streamContainer:fullscreen .stream-cam-overlay,
-        #streamContainer:fullscreen .overlay-cam-btn,
-        #streamContainer:-webkit-full-screen button,
-        #streamContainer:-webkit-full-screen .stream-cam-overlay,
-        #streamContainer:-webkit-full-screen .overlay-cam-btn,
-        #streamContainer:-moz-full-screen button,
-        #streamContainer:-moz-full-screen .stream-cam-overlay,
-        #streamContainer:-ms-fullscreen button,
-        #streamContainer:-ms-fullscreen .stream-cam-overlay,
-        .pure-camera-fullscreen button,
+        .pure-camera-fullscreen #streamCamOverlay,
         .pure-camera-fullscreen .stream-cam-overlay,
         .pure-camera-fullscreen .overlay-cam-btn,
-        :fullscreen button,
+        .pure-camera-fullscreen button,
+        #streamContainer.pure-camera-fullscreen #streamCamOverlay,
+        #streamContainer.pure-camera-fullscreen .stream-cam-overlay,
+        #streamContainer.pure-camera-fullscreen .overlay-cam-btn,
+        #streamContainer.pure-camera-fullscreen button,
+        body.pure-camera-fullscreen #streamCamOverlay,
+        body.pure-camera-fullscreen .stream-cam-overlay,
+        body.pure-camera-fullscreen .overlay-cam-btn,
+        body.pure-camera-fullscreen button {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* 2. Native Standard Fullscreen (:fullscreen) */
+        #streamContainer:fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: #000000 !important;
+            box-shadow: none !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+            z-index: 99999999 !important;
+        }
+
+        #streamContainer:fullscreen #videoStream {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            object-fit: contain !important;
+            display: block !important;
+            background: #000000 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+        }
+
+        #streamContainer:fullscreen #streamCamOverlay,
+        #streamContainer:fullscreen .stream-cam-overlay,
+        #streamContainer:fullscreen .overlay-cam-btn,
+        #streamContainer:fullscreen button,
+        :fullscreen #streamCamOverlay,
+        :fullscreen .stream-cam-overlay,
+        :fullscreen .overlay-cam-btn,
+        :fullscreen button {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* 3. Webkit Fullscreen (Chrome, Android Chrome, Safari) */
+        #streamContainer:-webkit-full-screen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: #000000 !important;
+            box-shadow: none !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+            z-index: 99999999 !important;
+        }
+
+        #streamContainer:-webkit-full-screen #videoStream {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            object-fit: contain !important;
+            display: block !important;
+            background: #000000 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+        }
+
+        #streamContainer:-webkit-full-screen #streamCamOverlay,
+        #streamContainer:-webkit-full-screen .stream-cam-overlay,
+        #streamContainer:-webkit-full-screen .overlay-cam-btn,
+        #streamContainer:-webkit-full-screen button,
+        :-webkit-full-screen #streamCamOverlay,
+        :-webkit-full-screen .stream-cam-overlay,
+        :-webkit-full-screen .overlay-cam-btn,
         :-webkit-full-screen button {
             display: none !important;
             visibility: hidden !important;
@@ -1690,7 +1819,7 @@
                     <span id="bannerTtc" style="color: #ffea00;">TTC: --</span>
                 </div>
 
-                <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream" onclick="handleVideoTap(event)" ondblclick="toggleFullscreen()">
+                <img id="videoStream" src="/video_feed" alt="Clear-Drive AI Camera Stream" onclick="handleVideoTap(event)" ondblclick="toggleFullscreen()" ontouchend="handleVideoTap(event)">
 
                 <!-- FLOATING IN-VIDEO CAMERA ORIENTATION & LENS TOOLBAR (Always Visible Over Video) -->
                 <div class="stream-cam-overlay" id="streamCamOverlay">
@@ -2585,15 +2714,75 @@
             .catch(e => console.error(e));
         }
 
+        function updatePureCameraFullscreenUI(isFull) {
+            const elem = document.getElementById('streamContainer');
+            const overlay = document.getElementById('streamCamOverlay');
+            const vStream = document.getElementById('videoStream');
+            
+            if (isFull) {
+                if (elem) {
+                    elem.classList.add('pure-camera-fullscreen');
+                    elem.style.setProperty('border', 'none', 'important');
+                    elem.style.setProperty('border-radius', '0', 'important');
+                    elem.style.setProperty('background', '#000000', 'important');
+                    elem.style.setProperty('padding', '0', 'important');
+                    elem.style.setProperty('margin', '0', 'important');
+                }
+                document.body.classList.add('pure-camera-fullscreen');
+                if (overlay) {
+                    overlay.style.setProperty('display', 'none', 'important');
+                    overlay.style.setProperty('visibility', 'hidden', 'important');
+                    overlay.style.setProperty('opacity', '0', 'important');
+                    overlay.style.setProperty('pointer-events', 'none', 'important');
+                }
+                if (vStream) {
+                    vStream.style.setProperty('width', '100vw', 'important');
+                    vStream.style.setProperty('height', '100vh', 'important');
+                    vStream.style.setProperty('max-height', '100vh', 'important');
+                    vStream.style.setProperty('max-width', '100vw', 'important');
+                    vStream.style.setProperty('object-fit', 'contain', 'important');
+                    vStream.style.setProperty('background', '#000000', 'important');
+                }
+            } else {
+                if (elem) {
+                    elem.classList.remove('pure-camera-fullscreen');
+                    elem.style.removeProperty('border');
+                    elem.style.removeProperty('border-radius');
+                    elem.style.removeProperty('background');
+                    elem.style.removeProperty('padding');
+                    elem.style.removeProperty('margin');
+                }
+                document.body.classList.remove('pure-camera-fullscreen');
+                if (overlay) {
+                    overlay.style.removeProperty('display');
+                    overlay.style.removeProperty('visibility');
+                    overlay.style.removeProperty('opacity');
+                    overlay.style.removeProperty('pointer-events');
+                }
+                if (vStream) {
+                    vStream.style.removeProperty('width');
+                    vStream.style.removeProperty('height');
+                    vStream.style.removeProperty('max-height');
+                    vStream.style.removeProperty('max-width');
+                    vStream.style.removeProperty('object-fit');
+                    vStream.style.removeProperty('background');
+                }
+            }
+        }
+
         function toggleFullscreen() {
             const elem = document.getElementById('streamContainer');
             if (!elem) return;
-            const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || elem.classList.contains('pure-camera-fullscreen'));
+            const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || elem.classList.contains('pure-camera-fullscreen') || document.body.classList.contains('pure-camera-fullscreen'));
+            
             if (!isFull) {
+                // Immediately apply pure camera styling (zero buttons, pure camera stream)
+                updatePureCameraFullscreenUI(true);
+                
+                // Request native browser fullscreen if supported
                 if (elem.requestFullscreen) {
                     elem.requestFullscreen().catch(err => {
-                        console.warn('Fullscreen request rejected, using full-viewport mode:', err);
-                        elem.classList.add('pure-camera-fullscreen');
+                        console.warn('Native requestFullscreen failed, using CSS full viewport:', err);
                     });
                 } else if (elem.webkitRequestFullscreen) {
                     elem.webkitRequestFullscreen();
@@ -2601,8 +2790,6 @@
                     elem.mozRequestFullScreen();
                 } else if (elem.msRequestFullscreen) {
                     elem.msRequestFullscreen();
-                } else {
-                    elem.classList.add('pure-camera-fullscreen');
                 }
             } else {
                 if (document.exitFullscreen) {
@@ -2614,19 +2801,18 @@
                 } else if (document.msExitFullscreen) {
                     document.msExitFullscreen();
                 }
-                elem.classList.remove('pure-camera-fullscreen');
+                updatePureCameraFullscreenUI(false);
             }
         }
 
         // Sync pure camera fullscreen class on native fullscreen change events
         function syncFullscreenState() {
-            const elem = document.getElementById('streamContainer');
-            if (!elem) return;
             const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
-            if (isFull) {
-                elem.classList.add('pure-camera-fullscreen');
+            if (!isFull) {
+                // Native fullscreen exited (e.g. via ESC key or mobile back gesture)
+                updatePureCameraFullscreenUI(false);
             } else {
-                elem.classList.remove('pure-camera-fullscreen');
+                updatePureCameraFullscreenUI(true);
             }
         }
         document.addEventListener('fullscreenchange', syncFullscreenState);
@@ -3639,7 +3825,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=4').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=5').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app

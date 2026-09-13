@@ -1,5 +1,5 @@
-// ClearDrive AI Service Worker - Auto-Updating PWA Engine (v4)
-const CACHE_NAME = 'cleardrive-pwa-v4';
+// ClearDrive AI Service Worker - Auto-Updating PWA Engine (v5)
+const CACHE_NAME = 'cleardrive-pwa-v5';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/static/icon-192.png',
