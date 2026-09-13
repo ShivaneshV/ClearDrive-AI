@@ -2582,7 +2582,7 @@
             const vSel = document.getElementById('videoSelect');
             if (vSel) vSel.value = device;
 
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 820);
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 820) || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
             // 3. Clear button dynamic subtitles/pills and assign dedicated state
             const subCar = document.getElementById('sub-dashcam-car');
@@ -2681,22 +2681,22 @@
 
                 let stream = null;
 
-                // Tier 1: Try exact facingMode constraint
+                // Tier 1: Try ideal facingMode constraint (never throws OverconstrainedError on mobile)
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({
                         video: {
-                            facingMode: { exact: currentCameraFacing },
+                            facingMode: { ideal: currentCameraFacing },
                             width: { ideal: 640 },
                             height: { ideal: 360 }
                         },
                         audio: false
                     });
                 } catch (e1) {
-                    // Tier 2: Fallback to ideal facingMode constraint
+                    // Tier 2: Try exact facingMode constraint
                     try {
                         stream = await navigator.mediaDevices.getUserMedia({
                             video: {
-                                facingMode: { ideal: currentCameraFacing },
+                                facingMode: { exact: currentCameraFacing },
                                 width: { ideal: 640 },
                                 height: { ideal: 360 }
                             },
@@ -2869,7 +2869,7 @@
                     const targetEndpoint = (vSel && vSel.value === 'phone') ? '/api/phone_frame' : '/api/laptop_frame';
 
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 200);
+                    const timeoutId = setTimeout(() => controller.abort(), 1500);
 
                     fetch(targetEndpoint, {
                         method: 'POST',

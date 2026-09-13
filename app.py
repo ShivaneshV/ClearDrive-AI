@@ -949,15 +949,6 @@ def receive_phone_frame():
     """Receives binary JPEG frames from mobile phone camera."""
     global phone_frame_buffer, phone_last_seen, phone_frame_id
     try:
-        ts_str = request.headers.get('X-Timestamp')
-        if ts_str:
-            try:
-                # Discard frames delayed more than 180ms in network queue
-                if (time.time() * 1000.0) - float(ts_str) > 180.0:
-                    return '', 204
-            except Exception:
-                pass
-
         data = request.get_data()
         if not data:
             return '', 400
@@ -979,15 +970,6 @@ def receive_laptop_frame():
     """Receives binary JPEG frames from laptop webcam browser capture."""
     global laptop_frame_buffer, laptop_last_seen, laptop_frame_id
     try:
-        ts_str = request.headers.get('X-Timestamp')
-        if ts_str:
-            try:
-                # Discard frames delayed more than 180ms in network queue
-                if (time.time() * 1000.0) - float(ts_str) > 180.0:
-                    return '', 204
-            except Exception:
-                pass
-
         data = request.get_data()
         if not data:
             return '', 400
