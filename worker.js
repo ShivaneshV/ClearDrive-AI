@@ -1,7 +1,15 @@
 export default {
   async fetch(request, env, ctx) {
+    let backend = "https://heater-integrate-unable-apply.trycloudflare.com";
+    try {
+      const res = await fetch("https://raw.githubusercontent.com/ShivaneshV/ClearDrive-AI/main/tunnel_url.txt", { cf: { cacheTtl: 15 } });
+      if (res.ok) {
+        const text = (await res.text()).trim();
+        if (text.startsWith("https://")) backend = text;
+      }
+    } catch (e) {}
+
     const url = new URL(request.url);
-    const backend = "https://heater-integrate-unable-apply.trycloudflare.com";
     const targetUrl = new URL(url.pathname + url.search, backend);
 
     const newHeaders = new Headers(request.headers);
