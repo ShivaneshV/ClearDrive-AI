@@ -35,8 +35,6 @@ key.pem
 cert.pem
 
 # Operating System & IDE metadata
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-*.swp
+# Local development binaries
+cloudflared.exe
+
