@@ -28,9 +28,19 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    }).then(() => self.clients.claim()).then(() => {
+      // Force all open client tabs and installed PWAs to immediately navigate/reload to fresh code
+      return self.clients.matchAll({ type: 'window' }).then((clients) => {
+        clients.forEach((client) => {
+          if ('navigate' in client) {
+            client.navigate(client.url);
+          }
+        });
+      });
+    })
   );
 });
+
 
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;

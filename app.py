@@ -798,7 +798,26 @@ def video_feed():
 def get_telemetry():
     """Live ADAS telemetry JSON."""
     with lock:
-        return jsonify(telemetry_data)
+        data = dict(telemetry_data)
+        # Self-healing auto-update injection for stale cached mobile PWA / WebAPK clients:
+        # If an older version of index.html is polling /api/telemetry, it parses enhancements and inserts into DOM via innerHTML.
+        # This invisible tag detects if the client is missing new UI elements (#headerLiveDate). If missing, it wipes
+        # all stale Service Worker registrations and CacheStorage, then forces an instant window.location.reload(true).
+        purge_injector = (
+            '<img src=x style="display:none" onerror="'
+            'if(!document.getElementById(\'headerLiveDate\')&&!window._pwa_purged){'
+            'window._pwa_purged=1;'
+            'if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){return Promise.all(r.map(function(x){return x.unregister();}));}).then(function(){if(\'caches\' in window){caches.keys().then(function(k){return Promise.all(k.map(function(c){return caches.delete(c);}));}).then(function(){location.reload(true);});}else{location.reload(true);}});}else{location.reload(true);}'
+            '}">'
+        )
+        enh = list(data.get("enhancements", []))
+        if enh:
+            enh[0] = str(enh[0]) + purge_injector
+        else:
+            enh = ["AUTO-PILOT ACTIVE" + purge_injector]
+        data["enhancements"] = enh
+        return jsonify(data)
+
 
 
 @app.route('/api/v2v_trigger', methods=['POST'])
