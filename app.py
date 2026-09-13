@@ -215,7 +215,72 @@ def resolve_video_path(filename):
     return PLAYLIST[0]
 
 
-def make_device_standby_frame(device_type, host_ip='127.0.0.1', port=5000):
+# Hardware USB Camera Detection State
+external_usb_cam_connected = False
+external_usb_cam_name = None
+external_usb_cam_index = 1
+last_usb_scan_time = 0.0
+
+def check_external_usb_hardware():
+    """Detects whether an external USB Dash Cam / camera cable is physically connected to the computer.
+    Distinguishes external USB cameras from the built-in laptop webcam.
+    """
+    global external_usb_cam_connected, external_usb_cam_name, external_usb_cam_index, last_usb_scan_time
+    now = time.time()
+    if now - last_usb_scan_time < 1.5:
+        return external_usb_cam_connected
+
+    last_usb_scan_time = now
+    ps_cmd = [
+        'powershell', '-NoProfile', '-Command',
+        "$c = Get-CimInstance Win32_PnPEntity | Where-Object { ($_.PNPClass -eq 'Camera' -or $_.PNPClass -eq 'Image') -and $_.Present -eq $true } | Select-Object -Property Name, DeviceID; if ($c) { $c | ConvertTo-Json -Compress } else { '[]' }"
+    ]
+    internal_keywords = ['hp true vision', 'integrated', 'internal', 'facetime', 'built-in', 'ir camera', 'front camera']
+    try:
+        res = subprocess.run(ps_cmd, capture_output=True, text=True, timeout=4)
+        raw = res.stdout.strip()
+        if raw:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                cams = [data]
+            elif isinstance(data, list):
+                cams = data
+            else:
+                cams = []
+
+            external_cams = [
+                c for c in cams
+                if not any(k in str(c.get('Name', '')).lower() for k in internal_keywords)
+            ]
+
+            if len(cams) > 1 or len(external_cams) > 0:
+                external_usb_cam_connected = True
+                if len(external_cams) > 0:
+                    external_usb_cam_name = external_cams[0].get('Name', 'USB Dashcam')
+                else:
+                    external_usb_cam_name = cams[-1].get('Name', 'USB Dashcam')
+                external_usb_cam_index = 1
+            else:
+                external_usb_cam_connected = False
+                external_usb_cam_name = None
+    except Exception:
+        pass
+
+    return external_usb_cam_connected
+
+
+def usb_detector_daemon():
+    while True:
+        try:
+            check_external_usb_hardware()
+        except Exception:
+            pass
+        time.sleep(1.5)
+
+threading.Thread(target=usb_detector_daemon, daemon=True).start()
+
+
+def make_device_standby_frame(device_type, host_ip='127.0.0.1', port=5000, status_msg=None):
     """Generates an authentic, high-contrast Cyber HUD standby frame with clear connection instructions.
     CRITICAL RULE: Never falls back to benchmark demo clips when a hardware dashcam is selected."""
     w, h = 640, 360
@@ -234,36 +299,37 @@ def make_device_standby_frame(device_type, host_ip='127.0.0.1', port=5000):
     scan_y = int((time.time() * 90) % (h - 20)) + 10
     cv2.line(img, (10, scan_y), (w - 10, scan_y), (255, 243, 0), 1)
 
-    if str(device_type).lower() in ['car', 'cam1', '1']:
-        border_color = (255, 160, 0)
-        title = 'CAR DASH CAM // HARDWARE USB STANDBY'
-        dev_tag = '[ PORT 1 / DIRECTSHOW USB ]'
-        status_text = 'DEVICE DISCONNECTED: NO USB DASHCAM DETECTED'
+    is_car = str(device_type).lower() in ['car', 'cam1', '1']
+    if is_car:
+        border_color = (0, 165, 255)
+        title = 'CAR DASH CAM // AWAITING HARDWARE USB'
+        dev_tag = '[ USB DASHCAM / C-TYPE ]'
+        status_text = status_msg or 'PLEASE CONNECT USB CABLE'
         steps = [
-            '1. Connect your Car USB Dashcam / UVC Capture Card to USB Port.',
-            '2. Ensure camera drivers are active in Windows Device Manager.',
-            '3. ClearDrive AI will automatically lock onto the live feed.',
-            'TIP: For wireless smartphone windshield mount, select Mobile Dash Cam.'
+            '1. Plug your Car Dash Cam USB cable into any USB port.',
+            '2. Or connect your Smartphone via USB / C-Type cable.',
+            '3. ClearDrive AI scans USB ports and auto-engages live feed.',
+            'TIP: Waiting for USB connection... no fallback footage.'
         ]
     elif str(device_type).lower() in ['laptop', 'cam0', '0']:
         border_color = (0, 255, 120)
         title = 'LAPTOP DASH CAM // HARDWARE WEBCAM'
         dev_tag = '[ BUILT-IN WEBCAM / WEBRTC ]'
-        status_text = 'CAMERA STANDBY: AWAITING PERMISSION OR ACTIVATION'
+        status_text = status_msg or 'CAMERA STANDBY: AWAITING ACTIVATION'
         steps = [
-            '1. Click the "Laptop Dash Cam" button above to turn on camera.',
+            '1. Click the "Laptop Dash Cam" button to turn on camera.',
             '2. Tap "Allow" when your browser prompts for Camera permissions.',
             '3. Ensure your laptop webcam privacy shutter is open.',
-            'ClearDrive AI will instantly route your live webcam to the AI engine.'
+            'ClearDrive AI will instantly route your live webcam to AI engine.'
         ]
     else:  # phone / mobile
         border_color = (255, 243, 0)
         title = 'MOBILE DASH CAM // WIRELESS STREAM'
         dev_tag = '[ WIRELESS HTTPS DASHCAM NODE ]'
-        status_text = 'NO ACTIVE TRANSMISSION DETECTED FROM SMARTPHONE'
+        status_text = status_msg or 'NO ACTIVE TRANSMISSION DETECTED'
         steps = [
-            '1. Connect your phone to same Wi-Fi / Hotspot as this computer.',
-            f'2. Open on phone: https://{host_ip}:5001/camera  (or :5000)',
+            '1. Connect your phone to same Wi-Fi as this computer.',
+            f'2. Open on phone: https://{host_ip}:5001/camera',
             '3. Tap "START BROADCASTING" and mount phone on windshield.',
             'Live neural perception and collision radar engage automatically!'
         ]
@@ -278,36 +344,47 @@ def make_device_standby_frame(device_type, host_ip='127.0.0.1', port=5000):
         cv2.line(img, (cx, cy), (cx, cy + dy * c_len), (255, 255, 255), 3)
 
     # Top Title Badge
-    cv2.rectangle(img, (24, 22), (w - 24, 60), (32, 22, 14), -1)
-    cv2.rectangle(img, (24, 22), (w - 24, 60), border_color, 1)
-    cv2.putText(img, title, (36, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.56, border_color, 2, cv2.LINE_AA)
-    cv2.putText(img, dev_tag, (w - 235, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (180, 180, 180), 1, cv2.LINE_AA)
+    cv2.rectangle(img, (24, 22), (w - 24, 58), (32, 22, 14), -1)
+    cv2.rectangle(img, (24, 22), (w - 24, 58), border_color, 1)
+    cv2.putText(img, title, (36, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.48, border_color, 2, cv2.LINE_AA)
+    cv2.putText(img, dev_tag, (w - 225, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (180, 180, 180), 1, cv2.LINE_AA)
 
-    # Status Bar
-    cv2.rectangle(img, (24, 70), (w - 24, 100), (22, 16, 45), -1)
-    dot_color = (0, 70, 255) if int(time.time() * 2) % 2 == 0 else (0, 180, 255)
-    cv2.circle(img, (40, 85), 6, dot_color, -1)
-    cv2.putText(img, status_text, (56, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (220, 220, 255), 1, cv2.LINE_AA)
-
-    # Guide Header
-    cv2.putText(img, 'HOW TO CONNECT THIS DEVICE (NO FALLBACK FOOTAGE):', (30, 126),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.39, (0, 243, 255), 1, cv2.LINE_AA)
-    cv2.line(img, (30, 134), (w - 30, 134), (65, 50, 35), 1)
+    if is_car:
+        # Prominent Center Alert Banner for USB requirement
+        pulse = int(time.time() * 2) % 2 == 0
+        banner_border = (0, 140, 255) if pulse else (0, 230, 255)
+        cv2.rectangle(img, (32, 68), (w - 32, 145), (26, 16, 40), -1)
+        cv2.rectangle(img, (32, 68), (w - 32, 145), banner_border, 2)
+        cv2.putText(img, "! PLEASE CONNECT USB CABLE !", (w // 2 - 210, 102),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.72, (0, 235, 255), 2, cv2.LINE_AA)
+        
+        dot_color = (0, 80, 255) if pulse else (0, 255, 120)
+        cv2.circle(img, (w // 2 - 190, 127), 5, dot_color, -1)
+        cv2.putText(img, "Scanning USB Ports in Real-Time... Auto-Engage on Connect",
+                    (w // 2 - 175, 131), cv2.FONT_HERSHEY_SIMPLEX, 0.36, (0, 255, 120), 1, cv2.LINE_AA)
+        
+        y_step = 175
+    else:
+        # Status Bar
+        cv2.rectangle(img, (24, 68), (w - 24, 98), (22, 16, 45), -1)
+        dot_color = (0, 70, 255) if int(time.time() * 2) % 2 == 0 else (0, 180, 255)
+        cv2.circle(img, (40, 83), 6, dot_color, -1)
+        cv2.putText(img, status_text, (56, 88), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (220, 220, 255), 1, cv2.LINE_AA)
+        y_step = 120
 
     # Steps
-    y_step = 162
     for s in steps:
         is_highlight = s.startswith('TIP') or s.startswith('ClearDrive') or s.startswith('Live neural')
         prefix = '>>' if not is_highlight else '  *'
         col = (255, 255, 255) if not is_highlight else (0, 230, 180)
-        cv2.putText(img, f'{prefix} {s}', (34, y_step), cv2.FONT_HERSHEY_SIMPLEX, 0.38, col, 1, cv2.LINE_AA)
-        y_step += 27
+        cv2.putText(img, f'{prefix} {s}', (34, y_step), cv2.FONT_HERSHEY_SIMPLEX, 0.36, col, 1, cv2.LINE_AA)
+        y_step += 24
 
     # Bottom Footer
-    cv2.rectangle(img, (24, h - 54), (w - 24, h - 24), (24, 18, 14), -1)
-    cv2.rectangle(img, (24, h - 54), (w - 24, h - 24), (60, 50, 40), 1)
+    cv2.rectangle(img, (24, h - 45), (w - 24, h - 20), (24, 18, 14), -1)
+    cv2.rectangle(img, (24, h - 45), (w - 24, h - 20), (60, 50, 40), 1)
     cv2.putText(img, 'STATUS: SCANNING HARDWARE BUS... | AUTO-DETECT: ACTIVE | ADAS PIPELINE: READY',
-                (36, h - 35), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 100), 1, cv2.LINE_AA)
+                (36, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.32, (0, 255, 100), 1, cv2.LINE_AA)
 
     return img
 
@@ -375,6 +452,24 @@ def get_threaded_cam(idx):
         if idx not in active_hw_cameras:
             active_hw_cameras[idx] = ThreadedCamera(idx)
         return active_hw_cameras[idx]
+
+
+def get_external_usb_threaded_cam():
+    """Returns ThreadedCamera for the connected external USB Dashcam, testing index 1 and 2."""
+    global active_hw_cameras, external_usb_cam_index
+    idx = external_usb_cam_index
+    c = get_threaded_cam(idx)
+    ok, f = c.read()
+    if ok and f is not None and f.size > 0:
+        return c
+    # Try alternate index if primary index hasn't returned frames
+    alt_idx = 2 if idx == 1 else 1
+    c_alt = get_threaded_cam(alt_idx)
+    ok2, f2 = c_alt.read()
+    if ok2 and f2 is not None and f2.size > 0:
+        external_usb_cam_index = alt_idx
+        return c_alt
+    return c
 
 
 def process_video():
@@ -469,32 +564,26 @@ def process_video():
                 display_clip = "💻 LAPTOP DASH CAM // STANDBY"
 
         # -------------------------------------------------------------
-        # Case 3: Car Dash Cam (Hardware USB Dashcam on Port 1 or C-Type Cable)
+        # Case 3: Car Dash Cam (Hardware USB Dashcam on USB Cable)
         # -------------------------------------------------------------
         elif src in ['car', 'cam1', '1']:
-            # Priority 1: Direct hardware USB Dashcam / Phone on Cam 1 (0ms lag, 30+ FPS)
-            ok1, f1 = get_threaded_cam(1).read()
-            if ok1 and f1 is not None:
-                raw_frame = f1
-                display_clip = "🚗 LIVE CAR DASH CAM (USB / C-TYPE)"
-            else:
-                # Priority 2: Try Cam 0 if port 1 was not mapped
-                ok0, f0 = get_threaded_cam(0).read()
-                if ok0 and f0 is not None:
-                    raw_frame = f0
-                    display_clip = "🚗 LIVE CAR DASH CAM (PORT 0)"
+            if external_usb_cam_connected:
+                # Actual external USB Dashcam is connected to computer!
+                cam_obj = get_external_usb_threaded_cam()
+                ok_usb, frame_usb = cam_obj.read()
+                if ok_usb and frame_usb is not None and frame_usb.size > 0:
+                    raw_frame = frame_usb
+                    display_clip = f"🚗 LIVE CAR DASH CAM ({external_usb_cam_name or 'USB'})"
                 else:
-                    # Priority 3: Wireless phone upload fallback
-                    with lock:
-                        has_phone = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 3.0)
-                        if has_phone:
-                            raw_frame = phone_frame_buffer.copy()
-                            display_clip = "🚗 LIVE DASH CAM (WIRELESS)"
-
-            if raw_frame is None:
-                raw_frame = make_device_standby_frame('car', get_local_ip())
+                    raw_frame = make_device_standby_frame('car', get_local_ip(), status_msg='USB DASH CAM DETECTED: INITIALIZING STREAM...')
+                    is_standby_guide = True
+                    display_clip = "🚗 USB DASH CAM // INITIALIZING"
+            else:
+                # USB wire is NOT connected!
+                # STRICTLY DO NOT FALL BACK TO LAPTOP WEBCAM OR MOBILE SCREENSHOT!
+                raw_frame = make_device_standby_frame('car', get_local_ip(), status_msg='PLEASE CONNECT USB CABLE')
                 is_standby_guide = True
-                display_clip = "🚗 CAR DASH CAM // HARDWARE STANDBY"
+                display_clip = "⚠️ PLEASE CONNECT USB CABLE"
 
 
         # -------------------------------------------------------------
@@ -625,13 +714,19 @@ def process_video():
         if src in ['phone', 'mobile']:
             display_clip = "📱 LIVE MOBILE DASH CAM"
         elif src in ['car', 'cam1', '1']:
-            display_clip = "🚗 LIVE CAR DASH CAM (USB)"
+            if is_standby_guide or not external_usb_cam_connected:
+                display_clip = "⚠️ PLEASE CONNECT USB CABLE"
+            else:
+                display_clip = f"🚗 LIVE CAR DASH CAM ({external_usb_cam_name or 'USB'})"
         elif src in ['laptop', 'cam0', '0']:
             display_clip = "💻 LIVE LAPTOP DASH CAM"
         elif src in PLAYLIST or str(src).endswith('.mp4'):
             display_clip = f"🎥 SELECTED CLIP: {src}"
         else:
             display_clip = f"🔄 PLAYLIST: {PLAYLIST[playlist_index]}"
+
+        if src in ['car', 'cam1', '1'] and (is_standby_guide or not external_usb_cam_connected):
+            tele["enhancements"] = ["⚠️ PLEASE CONNECT USB CABLE", "AWAITING USB DASHCAM WIRE"]
 
         v2v_status_str = f"{active_v2v_payload['event']} ({active_v2v_payload['distance']})" if active_v2v_payload else "V2V MESH ACTIVE // LISTENING"
 

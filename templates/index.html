@@ -2404,6 +2404,9 @@
                     'laptop': 'LAPTOP DASH CAM (BUILT-IN WEBCAM)'
                 };
                 addTerminalLog('DASHCAM-CTL', `Feed locked to: ${labelMap[device] || device.toUpperCase()}`);
+                if (device === 'car') {
+                    addTerminalLog('HARDWARE', '🔍 Scanning USB ports... Please connect USB cable of your Car Dash Cam');
+                }
                 const sImg = document.getElementById('videoStream');
                 if (sImg) sImg.src = '/video_feed?t=' + Date.now();
             })
@@ -3825,7 +3828,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=5').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=6').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
