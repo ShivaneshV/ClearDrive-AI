@@ -2,7 +2,10 @@ export default {
   async fetch(request, env, ctx) {
     let backend = "https://malpractice-eligible-haven-coating.trycloudflare.com";
     try {
-      const res = await fetch("https://raw.githubusercontent.com/ShivaneshV/ClearDrive-AI/main/tunnel_url.txt", { cf: { cacheTtl: 15 } });
+      const res = await fetch("https://raw.githubusercontent.com/ShivaneshV/ClearDrive-AI/main/tunnel_url.txt?t=" + Date.now(), {
+        headers: { "User-Agent": "ClearDriveWorker/1.0" },
+        cf: { cacheTtl: 0 }
+      });
       if (res.ok) {
         const text = (await res.text()).trim();
         if (text.startsWith("https://")) backend = text;
