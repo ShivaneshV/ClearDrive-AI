@@ -145,14 +145,17 @@ v2v_cycle_index = 0
 phone_frame_buffer = None
 phone_last_seen = 0.0
 phone_frame_id = 0
+phone_last_ts = 0.0
 
 # Laptop Web Dashcam Buffer
 laptop_frame_buffer = None
 laptop_last_seen = 0.0
 laptop_frame_id = 0
+laptop_last_ts = 0.0
 
 current_jpeg_bytes = None
 frame_seq_id = 0
+frame_condition = threading.Condition()
 
 telemetry_data = {
     "fps": 0.0,
@@ -565,22 +568,23 @@ def process_video():
                 display_clip = "📱 MOBILE DASH CAM // AWAITING STREAM"
 
         # -------------------------------------------------------------
-        # Case 2: Laptop Dash Cam (Direct HW Webcam Cam 0 or Browser getUserMedia)
+        # Case 2: Laptop Dash Cam (Browser getUserMedia or Direct HW Webcam Cam 0)
         # -------------------------------------------------------------
         elif src in ['laptop', 'cam0', '0']:
-            # Priority 1: Direct native hardware webcam (0ms lag, 30 FPS)
-            cam0 = get_threaded_cam(0)
-            ok0, f0 = cam0.read()
-            if ok0 and f0 is not None and f0.size > 0:
-                raw_frame = f0
-                display_clip = "💻 LIVE LAPTOP DASH CAM (BUILT-IN)"
-            else:
-                # Priority 2: Browser capture upload
-                with lock:
-                    has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 3.0)
-                    if has_laptop_stream:
-                        raw_frame = laptop_frame_buffer.copy()
-                        display_clip = "💻 LIVE LAPTOP DASH CAM (BROWSER)"
+            # Priority 1: Browser capture upload (if remote mobile/browser client is actively transmitting)
+            with lock:
+                has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 2.5)
+                if has_laptop_stream:
+                    raw_frame = laptop_frame_buffer.copy()
+                    display_clip = "💻 LIVE LAPTOP DASH CAM (BROWSER)"
+
+            if raw_frame is None:
+                # Priority 2: Direct native hardware webcam on host PC (0ms lag, 30 FPS)
+                cam0 = get_threaded_cam(0)
+                ok0, f0 = cam0.read()
+                if ok0 and f0 is not None and f0.size > 0:
+                    raw_frame = f0
+                    display_clip = "💻 LIVE LAPTOP DASH CAM (BUILT-IN)"
 
             if raw_frame is None:
                 raw_frame = make_device_standby_frame('laptop', get_local_ip())
@@ -670,51 +674,53 @@ def process_video():
                 standby_enh = ["DEVICE STANDBY", "AUTO-CONNECT ARMED"]
 
             ret_enc, buf_enc = cv2.imencode('.jpg', raw_frame, [
-                int(cv2.IMWRITE_JPEG_QUALITY), 65,
+                int(cv2.IMWRITE_JPEG_QUALITY), 60,
                 int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
             ])
 
-            with lock:
-                current_frame = raw_frame
-                if ret_enc:
-                    current_jpeg_bytes = buf_enc.tobytes()
-                frame_seq_id += 1
-                telemetry_data = {
-                    "fps": 30.0,
-                    "latency_ms": 1.0,
-                    "brake_alert": False,
-                    "ttc": 0.0,
-                    "vehicle_count": 0,
-                    "closest_vehicle": "STANDBY",
-                    "pothole_count": 0,
-                    "traction_hazard": False,
-                    "texture_var": 0.0,
-                    "v2v_active": False,
-                    "v2v_event": "DEVICE STANDBY // WAITING FOR CONNECTION",
-                    "speed_kmh": 0,
-                    "speed_limit": 80,
-                    "overspeed": False,
-                    "climate_profile": "STANDBY",
-                    "current_lane": "CENTER LANE",
-                    "lane_direction": "center",
-                    "lane_arrow": "●",
-                    "gps_lat": round(active_lat, 5),
-                    "gps_lon": round(active_lon, 5),
-                    "gps_speed": active_gps_speed,
-                    "gps_active": is_gps_active,
-                    "heading": round(active_heading, 1),
-                    "elevation_m": int(active_alt),
-                    "road_name": active_road,
-                    "enhancements": standby_enh,
-                    "current_video": display_clip,
-                    "mode": active_mode,
-                    "features": active_features_dict,
-                    "source": src,
-                    "split_view": is_split,
-                    "camera_rotation": camera_rotation,
-                    "camera_flip_h": camera_flip_h,
-                    "local_ip": get_local_ip()
-                }
+            with frame_condition:
+                with lock:
+                    current_frame = raw_frame
+                    if ret_enc:
+                        current_jpeg_bytes = buf_enc.tobytes()
+                    frame_seq_id += 1
+                    telemetry_data = {
+                        "fps": 30.0,
+                        "latency_ms": 1.0,
+                        "brake_alert": False,
+                        "ttc": 0.0,
+                        "vehicle_count": 0,
+                        "closest_vehicle": "STANDBY",
+                        "pothole_count": 0,
+                        "traction_hazard": False,
+                        "texture_var": 0.0,
+                        "v2v_active": False,
+                        "v2v_event": "DEVICE STANDBY // WAITING FOR CONNECTION",
+                        "speed_kmh": 0,
+                        "speed_limit": 80,
+                        "overspeed": False,
+                        "climate_profile": "STANDBY",
+                        "current_lane": "CENTER LANE",
+                        "lane_direction": "center",
+                        "lane_arrow": "●",
+                        "gps_lat": round(active_lat, 5),
+                        "gps_lon": round(active_lon, 5),
+                        "gps_speed": active_gps_speed,
+                        "gps_active": is_gps_active,
+                        "heading": round(active_heading, 1),
+                        "elevation_m": int(active_alt),
+                        "road_name": active_road,
+                        "enhancements": standby_enh,
+                        "current_video": display_clip,
+                        "mode": active_mode,
+                        "features": active_features_dict,
+                        "source": src,
+                        "split_view": is_split,
+                        "camera_rotation": camera_rotation,
+                        "camera_flip_h": camera_flip_h,
+                        "local_ip": get_local_ip()
+                    }
+                frame_condition.notify_all()
             time.sleep(0.033)
             continue
 
@@ -778,70 +784,73 @@ def process_video():
 
         # Encode single high-efficiency JPEG buffer for all streaming clients (fast encoding, zero generator overhead)
         ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
-            int(cv2.IMWRITE_JPEG_QUALITY), 48,
+            int(cv2.IMWRITE_JPEG_QUALITY), 44,
             int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
         ])
 
-        # Update Live Telemetry
-        with lock:
-            telemetry_data = {
-                "fps": round(fps, 1),
-                "latency_ms": round(latency_ms, 1),
-                "brake_alert": emergency_brake,
-                "ttc": tele["ttc"],
-                "vehicle_count": tele["vehicle_count"],
-                "closest_vehicle": tele["closest_vehicle"],
-                "pothole_count": tele["pothole_count"],
-                "traction_hazard": tele["traction_hazard"],
-                "texture_var": tele["texture_var"],
-                "v2v_active": tele["v2v_active"],
-                "v2v_event": v2v_status_str,
-                "speed_kmh": tele["speed_kmh"],
-                "speed_limit": tele["speed_limit"],
-                "overspeed": tele["overspeed"],
-                "climate_profile": tele["climate_profile"],
-                "current_lane": tele.get("current_lane", "CENTER LANE"),
-                "lane_direction": tele.get("lane_direction", "center"),
-                "lane_arrow": tele.get("lane_arrow", "●"),
-                "gps_lat": round(active_lat, 5),
-                "gps_lon": round(active_lon, 5),
-                "gps_speed": active_gps_speed,
-                "gps_active": is_gps_active,
-                "heading": round(active_heading, 1),
-                "elevation_m": int(active_alt),
-                "road_name": active_road,
-                "enhancements": tele["enhancements"],
-                "current_video": display_clip,
-                "mode": active_mode,
-                "features": active_features_dict,
-                "source": src,
-                "split_view": is_split,
-                "camera_rotation": camera_rotation,
-                "camera_flip_h": camera_flip_h,
-                "local_ip": get_local_ip()
-            }
-            current_frame = dashboard_frame
-            if ret_enc:
-                current_jpeg_bytes = buf_enc.tobytes()
-            frame_seq_id += 1
+        # Update Live Telemetry & Notify Waiting Stream Clients
+        with frame_condition:
+            with lock:
+                telemetry_data = {
+                    "fps": round(fps, 1),
+                    "latency_ms": round(latency_ms, 1),
+                    "brake_alert": emergency_brake,
+                    "ttc": tele["ttc"],
+                    "vehicle_count": tele["vehicle_count"],
+                    "closest_vehicle": tele["closest_vehicle"],
+                    "pothole_count": tele["pothole_count"],
+                    "traction_hazard": tele["traction_hazard"],
+                    "texture_var": tele["texture_var"],
+                    "v2v_active": tele["v2v_active"],
+                    "v2v_event": v2v_status_str,
+                    "speed_kmh": tele["speed_kmh"],
+                    "speed_limit": tele["speed_limit"],
+                    "overspeed": tele["overspeed"],
+                    "climate_profile": tele["climate_profile"],
+                    "current_lane": tele.get("current_lane", "CENTER LANE"),
+                    "lane_direction": tele.get("lane_direction", "center"),
+                    "lane_arrow": tele.get("lane_arrow", "●"),
+                    "gps_lat": round(active_lat, 5),
+                    "gps_lon": round(active_lon, 5),
+                    "gps_speed": active_gps_speed,
+                    "gps_active": is_gps_active,
+                    "heading": round(active_heading, 1),
+                    "elevation_m": int(active_alt),
+                    "road_name": active_road,
+                    "enhancements": tele["enhancements"],
+                    "current_video": display_clip,
+                    "mode": active_mode,
+                    "features": active_features_dict,
+                    "source": src,
+                    "split_view": is_split,
+                    "camera_rotation": camera_rotation,
+                    "camera_flip_h": camera_flip_h,
+                    "local_ip": get_local_ip()
+                }
+                current_frame = dashboard_frame
+                if ret_enc:
+                    current_jpeg_bytes = buf_enc.tobytes()
+                frame_seq_id += 1
+            frame_condition.notify_all()
 
-        # Smooth Universal Pacing: ~30 FPS (target 33.3ms per frame)
+        # Smooth Universal Pacing: ~30 FPS with Zero-Lag Adaptive Sleep
         elapsed = time.time() - start_process
         target_frame_time = 0.0333
-        sleep_needed = max(0.002, target_frame_time - elapsed)
-        time.sleep(sleep_needed)
+        sleep_needed = target_frame_time - elapsed
+        if sleep_needed > 0.001:
+            time.sleep(sleep_needed)
 
 
 def generate_frames():
     """Generator yielding ultra-low-latency multipart JPEG frames with zero per-client encoding overhead."""
-    global current_jpeg_bytes, frame_seq_id
+    global current_jpeg_bytes, frame_seq_id, frame_condition
     last_seq = -1
 
     # Send immediate warmup frame so HTTP 200 headers flush instantly to Cloudflare/browser
     warmup_img = np.zeros((360, 640, 3), dtype=np.uint8)
     cv2.putText(warmup_img, "CLEAR-DRIVE AI // CONNECTING CAMERA FEED...", (35, 180),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 243, 255), 2, cv2.LINE_AA)
-    ret_w, buf_w = cv2.imencode('.jpg', warmup_img, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+    ret_w, buf_w = cv2.imencode('.jpg', warmup_img, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
     if ret_w:
         wb = buf_w.tobytes()
         try:
@@ -854,17 +863,14 @@ def generate_frames():
 
     try:
         while True:
-            with lock:
-                if current_jpeg_bytes is None or frame_seq_id == last_seq:
-                    sleep_time = 0.005
-                    bytes_to_stream = None
-                else:
-                    last_seq = frame_seq_id
-                    bytes_to_stream = current_jpeg_bytes
-                    sleep_time = 0.0
+            with frame_condition:
+                while current_jpeg_bytes is None or frame_seq_id == last_seq:
+                    if not frame_condition.wait(timeout=0.045):
+                        break
+                last_seq = frame_seq_id
+                bytes_to_stream = current_jpeg_bytes
 
             if bytes_to_stream is None:
-                time.sleep(sleep_time)
                 continue
 
             yield (b'--frame\r\n'
@@ -947,8 +953,18 @@ def camera_node():
 @app.route('/api/phone_frame', methods=['POST'])
 def receive_phone_frame():
     """Receives binary JPEG frames from mobile phone camera."""
-    global phone_frame_buffer, phone_last_seen, phone_frame_id
+    global phone_frame_buffer, phone_last_seen, phone_frame_id, phone_last_ts
     try:
+        ts_hdr = request.headers.get('X-Timestamp')
+        if ts_hdr:
+            try:
+                ts = float(ts_hdr)
+                if ts < phone_last_ts:
+                    return '', 204  # Drop out-of-order frame
+                phone_last_ts = ts
+            except ValueError:
+                pass
+
         data = request.get_data()
         if not data:
             return '', 400
@@ -968,8 +984,18 @@ def receive_phone_frame():
 @app.route('/api/laptop_frame', methods=['POST'])
 def receive_laptop_frame():
     """Receives binary JPEG frames from laptop webcam browser capture."""
-    global laptop_frame_buffer, laptop_last_seen, laptop_frame_id
+    global laptop_frame_buffer, laptop_last_seen, laptop_frame_id, laptop_last_ts
     try:
+        ts_hdr = request.headers.get('X-Timestamp')
+        if ts_hdr:
+            try:
+                ts = float(ts_hdr)
+                if ts < laptop_last_ts:
+                    return '', 204  # Drop out-of-order frame
+                laptop_last_ts = ts
+            except ValueError:
+                pass
+
         data = request.get_data()
         if not data:
             return '', 400
@@ -990,7 +1016,7 @@ def receive_laptop_frame():
 def video_feed():
     """Live MJPEG video feed with zero proxy buffering."""
     resp = Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0, no-transform'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
     resp.headers['X-Accel-Buffering'] = 'no'

@@ -2668,14 +2668,14 @@
                     laptopVideoElem.setAttribute('autoplay', '');
                     laptopVideoElem.setAttribute('playsinline', '');
                     laptopVideoElem.setAttribute('muted', '');
-                    laptopVideoElem.style.display = 'none';
+                    laptopVideoElem.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;opacity:0.01;pointer-events:none;z-index:-999;";
                     document.body.appendChild(laptopVideoElem);
                 }
                 if (!laptopCanvas) {
                     laptopCanvas = document.createElement('canvas');
-                    laptopCanvas.width = 640;
-                    laptopCanvas.height = 360;
-                    laptopCanvas.style.display = 'none';
+                    laptopCanvas.width = 480;
+                    laptopCanvas.height = 270;
+                    laptopCanvas.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
                     document.body.appendChild(laptopCanvas);
                 }
 
@@ -2841,27 +2841,27 @@
             }).catch(e => {});
         }
 
-        let isDeviceUploading = false;
+        let activeDeviceUploads = 0;
         function transmitLaptopFrames() {
             if (!isLaptopStreaming || !laptopVideoElem) return;
 
             function sendNext() {
                 if (!isLaptopStreaming) return;
 
-                if (isDeviceUploading || laptopVideoElem.readyState < 2) {
-                    laptopUploadTimer = setTimeout(sendNext, 16);
+                if (activeDeviceUploads >= 2 || laptopVideoElem.readyState < 2) {
+                    laptopUploadTimer = setTimeout(sendNext, 12);
                     return;
                 }
 
-                isDeviceUploading = true;
+                activeDeviceUploads++;
                 const ctx = laptopCanvas.getContext('2d');
-                ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
+                ctx.drawImage(laptopVideoElem, 0, 0, 480, 270);
 
                 const nowTs = Date.now();
                 laptopCanvas.toBlob(blob => {
                     if (!blob || !isLaptopStreaming) {
-                        isDeviceUploading = false;
-                        laptopUploadTimer = setTimeout(sendNext, 16);
+                        activeDeviceUploads = Math.max(0, activeDeviceUploads - 1);
+                        laptopUploadTimer = setTimeout(sendNext, 12);
                         return;
                     }
 
@@ -2869,7 +2869,7 @@
                     const targetEndpoint = (vSel && vSel.value === 'phone') ? '/api/phone_frame' : '/api/laptop_frame';
 
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 1500);
+                    const timeoutId = setTimeout(() => controller.abort(), 1200);
 
                     fetch(targetEndpoint, {
                         method: 'POST',
@@ -2883,16 +2883,21 @@
                     .catch(() => {})
                     .finally(() => {
                         clearTimeout(timeoutId);
-                        isDeviceUploading = false;
+                        activeDeviceUploads = Math.max(0, activeDeviceUploads - 1);
                         if (isLaptopStreaming) {
                             laptopUploadTimer = setTimeout(sendNext, 4);
                         }
                     });
-                }, 'image/jpeg', 0.45);
+
+                    // Schedule next frame in pipeline if capacity available
+                    if (activeDeviceUploads < 2 && isLaptopStreaming) {
+                        laptopUploadTimer = setTimeout(sendNext, 16);
+                    }
+                }, 'image/jpeg', 0.38);
             }
 
             if (laptopUploadTimer) clearTimeout(laptopUploadTimer);
-            isDeviceUploading = false;
+            activeDeviceUploads = 0;
             sendNext();
         }
 
@@ -4130,7 +4135,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=9').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=10').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
@@ -4222,17 +4227,23 @@
                 modalLink.textContent = camUrl;
             }
 
-            // Live Stream Reconnection Watchdog (Cold-boot recovery)
+            // Live Stream Reconnection Watchdog & Instant Tap-to-Resync
             const streamImg = document.getElementById('videoStream');
             let streamReconnectTimeout = null;
             if (streamImg) {
+                streamImg.style.cursor = 'pointer';
+                streamImg.title = 'ClearDrive AI Stream (Tap to instant-resync if connection lags)';
+                streamImg.addEventListener('click', () => {
+                    streamImg.src = '/video_feed?t=' + Date.now();
+                    showFloatingSourcePill('⚡', 'FEED RESYNCED // ZERO LATENCY');
+                });
                 streamImg.onerror = function() {
                     if (streamReconnectTimeout) return;
-                    console.warn("[Stream Watchdog] Feed disconnected. Retrying in 2s...");
+                    console.warn("[Stream Watchdog] Feed disconnected. Retrying in 1.5s...");
                     streamReconnectTimeout = setTimeout(() => {
                         streamReconnectTimeout = null;
                         streamImg.src = '/video_feed?t=' + Date.now();
-                    }, 2000);
+                    }, 1500);
                 };
             }
         });

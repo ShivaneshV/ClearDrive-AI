@@ -348,13 +348,13 @@
                 activeMediaStream = stream;
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    canvas.width = 1280;
-                    canvas.height = 720;
+                    canvas.width = 480;
+                    canvas.height = 270;
                     const camLabel = isBack ? '📷 ROAD CAM READY' : '🤳 CABIN CAM READY';
                     statusPill.textContent = `${camLabel} (720p HD)`;
                     statusPill.style.color = '#00ff66';
                     statusPill.style.borderColor = '#00ff66';
-                    hudInfo.textContent = `LENS: ${isBack ? 'REAR (ROAD)' : 'FRONT (CABIN)'} | 720p HD READY`;
+                    hudInfo.textContent = `LENS: ${isBack ? 'REAR (ROAD)' : 'FRONT (CABIN)'} | ULTRA-SMOOTH READY`;
                 };
             } else {
                 statusPill.textContent = 'CAMERA BLOCKED';
@@ -423,30 +423,28 @@
             }).catch(e => {});
         }
 
-        let isPhoneUploading = false;
+        let activePhoneUploads = 0;
         function transmitNextFrame() {
             if (!isStreaming) return;
 
-            if (isPhoneUploading || video.readyState < 2) {
+            if (activePhoneUploads >= 2 || video.readyState < 2) {
                 scheduleNext();
                 return;
             }
 
-            isPhoneUploading = true;
-            canvas.width = 640;
-            canvas.height = 360;
-            ctx.drawImage(video, 0, 0, 640, 360);
+            activePhoneUploads++;
+            ctx.drawImage(video, 0, 0, 480, 270);
 
             const nowTs = Date.now();
             canvas.toBlob((blob) => {
                 if (!blob || !isStreaming) {
-                    isPhoneUploading = false;
+                    activePhoneUploads = Math.max(0, activePhoneUploads - 1);
                     scheduleNext();
                     return;
                 }
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1500);
+                const timeoutId = setTimeout(() => controller.abort(), 1200);
 
                 fetch('/api/phone_frame', {
                     method: 'POST',
@@ -464,23 +462,28 @@
                         currentFps = Math.round((frameCount * 1000) / (now - lastFpsTime));
                         frameCount = 0;
                         lastFpsTime = now;
-                        hudInfo.textContent = `⚡ LIVE FPS: ${currentFps} | HD ZERO-LAG ULTRA-SMOOTH`;
+                        hudInfo.textContent = `⚡ LIVE FPS: ${currentFps} | ZERO-LAG ULTRA-SMOOTH`;
                     }
                 })
                 .catch(() => {})
                 .finally(() => {
                     clearTimeout(timeoutId);
-                    isPhoneUploading = false;
+                    activePhoneUploads = Math.max(0, activePhoneUploads - 1);
                     if (isStreaming) {
                         scheduleNext();
                     }
                 });
-            }, 'image/jpeg', 0.45);
+
+                // Pipeline: schedule next frame immediately if slot open
+                if (activePhoneUploads < 2 && isStreaming) {
+                    scheduleNext();
+                }
+            }, 'image/jpeg', 0.38);
         }
 
         function stopBroadcast() {
             isStreaming = false;
-            isUploading = false;
+            activePhoneUploads = 0;
             if (broadcastTimer) clearTimeout(broadcastTimer);
             statusPill.textContent = 'STANDBY';
             statusPill.style.color = '#ffd700';
