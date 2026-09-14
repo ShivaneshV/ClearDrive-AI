@@ -778,7 +778,7 @@ def process_video():
 
         # Encode single high-efficiency JPEG buffer for all streaming clients (fast encoding, zero generator overhead)
         ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
-            int(cv2.IMWRITE_JPEG_QUALITY), 56,
+            int(cv2.IMWRITE_JPEG_QUALITY), 48,
             int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
         ])
 
@@ -994,6 +994,7 @@ def video_feed():
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
     resp.headers['X-Accel-Buffering'] = 'no'
+    resp.headers['Transfer-Encoding'] = 'chunked'
     return resp
 
 
