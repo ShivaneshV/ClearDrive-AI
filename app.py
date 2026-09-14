@@ -994,7 +994,6 @@ def video_feed():
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
     resp.headers['X-Accel-Buffering'] = 'no'
-    resp.headers['Transfer-Encoding'] = 'chunked'
     return resp
 
 
