@@ -153,6 +153,12 @@ laptop_last_seen = 0.0
 laptop_frame_id = 0
 laptop_last_ts = 0.0
 
+# Car Web Dashcam Buffer (from Car Android TV / USB browser upload)
+car_frame_buffer = None
+car_last_seen = 0.0
+car_frame_id = 0
+car_last_ts = 0.0
+
 current_jpeg_bytes = None
 frame_seq_id = 0
 frame_condition = threading.Condition()
@@ -592,11 +598,18 @@ def process_video():
                 display_clip = "💻 LAPTOP DASH CAM // STANDBY"
 
         # -------------------------------------------------------------
-        # Case 3: Car Dash Cam (Hardware USB Dashcam on USB Cable)
+        # Case 3: Car Dash Cam (Hardware USB Dashcam on USB Cable or Car Android TV Browser Upload)
         # -------------------------------------------------------------
         elif src in ['car', 'cam1', '1']:
-            if external_usb_cam_connected:
-                # Actual external USB Dashcam is physically connected to computer!
+            # Priority 1: Browser upload from Car Android TV / USB Camera
+            with lock:
+                has_car_stream = (car_frame_buffer is not None) and ((now - car_last_seen) < 2.5)
+                if has_car_stream:
+                    raw_frame = car_frame_buffer.copy()
+                    display_clip = "🚗 LIVE CAR DASH CAM (ANDROID TV/USB)"
+
+            # Priority 2: Direct physical USB Dashcam plugged into host machine
+            if raw_frame is None and external_usb_cam_connected:
                 cam_obj = get_external_usb_threaded_cam()
                 ok_usb = False
                 frame_usb = None
@@ -609,9 +622,9 @@ def process_video():
                     raw_frame = make_device_standby_frame('car', get_local_ip(), status_msg='USB DASH CAM DETECTED: INITIALIZING STREAM...')
                     is_standby_guide = True
                     display_clip = "🚗 USB DASH CAM // INITIALIZING"
-            else:
-                # USB wire is NOT connected!
-                # STRICTLY DO NOT FALL BACK TO LAPTOP WEBCAM OR MOBILE SCREENSHOT!
+
+            # Priority 3: Standby Guide (Neither browser stream nor physical USB cable detected)
+            if raw_frame is None:
                 raw_frame = make_device_standby_frame('car', get_local_ip(), status_msg='PLEASE CONNECT USB CABLE')
                 is_standby_guide = True
                 display_clip = "⚠️ PLEASE CONNECT USB CABLE"
@@ -766,9 +779,12 @@ def process_video():
             display_clip = "📱 LIVE MOBILE DASH CAM"
             tele["enhancements"] = ["📱 MOBILE DASH CAM ACTIVE", "WIRELESS HD WINDSHIELD NODE"]
         elif src in ['car', 'cam1', '1']:
-            if is_standby_guide or not external_usb_cam_connected:
+            if is_standby_guide:
                 display_clip = "⚠️ PLEASE CONNECT USB CABLE"
                 tele["enhancements"] = ["🚗 CAR DASH CAM", "⚠️ PLEASE CONNECT USB CABLE"]
+            elif (car_frame_buffer is not None) and ((now - car_last_seen) < 3.0):
+                display_clip = "🚗 LIVE CAR DASH CAM (ANDROID TV/USB)"
+                tele["enhancements"] = ["🚗 CAR DASH CAM ACTIVE", "ANDROID TV / USB CAMERA"]
             else:
                 display_clip = f"🚗 LIVE CAR DASH CAM ({external_usb_cam_name or 'USB'})"
                 tele["enhancements"] = ["🚗 CAR DASH CAM ACTIVE", f"HARDWARE USB ({external_usb_cam_name or 'UVC'})"]
@@ -1006,6 +1022,37 @@ def receive_laptop_frame():
                 laptop_frame_buffer = frame
                 laptop_last_seen = time.time()
                 laptop_frame_id += 1
+            return '', 204
+        return '', 400
+    except Exception:
+        return '', 500
+
+
+@app.route('/api/car_frame', methods=['POST'])
+def receive_car_frame():
+    """Receives binary JPEG frames from Car Android TV / USB browser dashcam."""
+    global car_frame_buffer, car_last_seen, car_frame_id, car_last_ts
+    try:
+        ts_hdr = request.headers.get('X-Timestamp')
+        if ts_hdr:
+            try:
+                ts = float(ts_hdr)
+                if ts < car_last_ts:
+                    return '', 204  # Drop out-of-order frame
+                car_last_ts = ts
+            except ValueError:
+                pass
+
+        data = request.get_data()
+        if not data:
+            return '', 400
+        nparr = np.frombuffer(data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is not None and frame.size > 0:
+            with lock:
+                car_frame_buffer = frame
+                car_last_seen = time.time()
+                car_frame_id += 1
             return '', 204
         return '', 400
     except Exception:

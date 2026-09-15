@@ -2593,12 +2593,28 @@
             const pillLaptop = document.getElementById('pill-dashcam-laptop');
 
             if (device === 'car') {
-                stopLaptopWebcam();
-                if (subCar) subCar.textContent = '🔍 Scanning USB Ports...';
-                if (pillCar) { pillCar.textContent = 'AWAITING USB'; pillCar.className = 'dashcam-pill pill-car'; }
-                updateSourceRibbonUI('car', 'Please connect USB cable of your Car Dash Cam', false);
-                showFloatingSourcePill('🚗', 'CAR DASH CAM: Awaiting USB Cable');
-                addTerminalLog('HARDWARE', '🚗 CAR DASH CAM: Scanning USB ports... Please connect USB cable');
+                if (subCar) subCar.textContent = '🔍 Connecting Car Dash Cam...';
+                if (pillCar) { pillCar.textContent = 'CONNECTING'; pillCar.className = 'dashcam-pill pill-car'; }
+                updateSourceRibbonUI('car', 'Connecting Car Dash Cam...', false);
+                showFloatingSourcePill('🚗', 'CAR DASH CAM: Requesting Camera...');
+                addTerminalLog('HARDWARE', '🚗 CAR DASH CAM: Requesting browser camera permissions...');
+
+                // Request camera permission in browser (for Car Android TV / USB Camera)
+                const camSuccess = await activateDeviceCamera('car');
+                if (camSuccess) {
+                    if (subCar) subCar.textContent = '🟢 Car Dash Cam Active';
+                    if (pillCar) { pillCar.textContent = 'ACTIVE'; pillCar.className = 'dashcam-pill pill-car'; }
+                    updateSourceRibbonUI('car', 'Car Dash Cam active @ 30 FPS', true);
+                    showFloatingSourcePill('🚗', 'CAR DASH CAM: Live Feed Online');
+                    addTerminalLog('HARDWARE', '🚗 CAR DASH CAM: Browser camera stream active');
+                } else {
+                    // Browser has no camera attached or permission denied - backend will scan physical USB on PC
+                    if (subCar) subCar.textContent = '🔍 Scanning USB Ports...';
+                    if (pillCar) { pillCar.textContent = 'AWAITING USB'; pillCar.className = 'dashcam-pill pill-car'; }
+                    updateSourceRibbonUI('car', 'Please connect USB cable of your Car Dash Cam', false);
+                    showFloatingSourcePill('🚗', 'CAR DASH CAM: Awaiting USB Cable');
+                    addTerminalLog('HARDWARE', '🚗 CAR DASH CAM: Awaiting USB hardware cable');
+                }
             } else if (device === 'phone') {
                 if (isMobile) {
                     currentCameraFacing = 'environment';
@@ -2652,11 +2668,13 @@
             }
             updateCameraFacingUI();
 
+            const isCar = (currentCameraFacing === 'car');
             const isBack = (currentCameraFacing === 'environment');
-            addTerminalLog('HARDWARE', `Requesting ${isBack ? 'BACK/ROAD' : 'FRONT/CABIN'} camera permissions...`);
+            const logName = isCar ? 'CAR DASH CAM (USB)' : (isBack ? 'BACK/ROAD' : 'FRONT/CABIN');
+            addTerminalLog('HARDWARE', `Requesting ${logName} camera permissions...`);
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 addTerminalLog('HARDWARE', 'Camera requires HTTPS or localhost context.', 'crit');
-                return;
+                return false;
             }
 
             // Always stop any previously active stream tracks to release the hardware camera
@@ -2681,59 +2699,80 @@
 
                 let stream = null;
 
-                // Tier 1: Try ideal facingMode constraint (never throws OverconstrainedError on mobile)
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            facingMode: { ideal: currentCameraFacing },
-                            width: { ideal: 640 },
-                            height: { ideal: 360 }
-                        },
-                        audio: false
-                    });
-                } catch (e1) {
-                    // Tier 2: Try exact facingMode constraint
+                // Priority 0: For Car Dash Cam, scan for USB / UVC / External cameras first
+                if (isCar) {
                     try {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        const videoDevs = devices.filter(d => d.kind === 'videoinput');
+                        const usbDev = videoDevs.find(d => /usb|uvc|dash|external|cam/i.test(d.label)) || videoDevs.find(d => /back|rear|environment/i.test(d.label)) || videoDevs[videoDevs.length - 1];
+                        if (usbDev && usbDev.deviceId) {
+                            stream = await navigator.mediaDevices.getUserMedia({
+                                video: { deviceId: { exact: usbDev.deviceId }, width: { ideal: 640 }, height: { ideal: 360 } },
+                                audio: false
+                            });
+                        }
+                    } catch (eUsb) {}
+                }
+
+                // Tier 1: Try ideal facingMode constraint (never throws OverconstrainedError on mobile)
+                if (!stream) {
+                    try {
+                        const facingTarget = isCar ? 'environment' : currentCameraFacing;
                         stream = await navigator.mediaDevices.getUserMedia({
                             video: {
-                                facingMode: { exact: currentCameraFacing },
+                                facingMode: { ideal: facingTarget },
                                 width: { ideal: 640 },
                                 height: { ideal: 360 }
                             },
                             audio: false
                         });
-                    } catch (e2) {
-                        // Tier 3: Device enumeration search
+                    } catch (e1) {
+                        // Tier 2: Try exact facingMode constraint
                         try {
-                            const devices = await navigator.mediaDevices.enumerateDevices();
-                            const videoDevs = devices.filter(d => d.kind === 'videoinput');
-                            let matched = null;
-                            if (isBack) {
-                                matched = videoDevs.find(d => /back|rear|environment/i.test(d.label)) || videoDevs[videoDevs.length - 1];
-                            } else {
-                                matched = videoDevs.find(d => /front|user|selfie/i.test(d.label)) || videoDevs[0];
-                            }
-                            if (matched && matched.deviceId) {
-                                stream = await navigator.mediaDevices.getUserMedia({
-                                    video: { deviceId: { exact: matched.deviceId } },
-                                    audio: false
-                                });
-                            } else {
-                                throw new Error('No device match');
-                            }
-                        } catch (e3) {
-                            // Tier 4: Basic string facingMode
+                            const facingTarget = isCar ? 'environment' : currentCameraFacing;
+                            stream = await navigator.mediaDevices.getUserMedia({
+                                video: {
+                                    facingMode: { exact: facingTarget },
+                                    width: { ideal: 640 },
+                                    height: { ideal: 360 }
+                                },
+                                audio: false
+                            });
+                        } catch (e2) {
+                            // Tier 3: Device enumeration search
                             try {
-                                stream = await navigator.mediaDevices.getUserMedia({
-                                    video: { facingMode: currentCameraFacing },
-                                    audio: false
-                                });
-                            } catch (e4) {
-                                // Tier 5: Any camera fallback
-                                stream = await navigator.mediaDevices.getUserMedia({
-                                    video: true,
-                                    audio: false
-                                });
+                                const devices = await navigator.mediaDevices.enumerateDevices();
+                                const videoDevs = devices.filter(d => d.kind === 'videoinput');
+                                let matched = null;
+                                if (isCar) {
+                                    matched = videoDevs.find(d => /usb|uvc|dash|external/i.test(d.label)) || videoDevs[videoDevs.length - 1] || videoDevs[0];
+                                } else if (isBack) {
+                                    matched = videoDevs.find(d => /back|rear|environment/i.test(d.label)) || videoDevs[videoDevs.length - 1];
+                                } else {
+                                    matched = videoDevs.find(d => /front|user|selfie/i.test(d.label)) || videoDevs[0];
+                                }
+                                if (matched && matched.deviceId) {
+                                    stream = await navigator.mediaDevices.getUserMedia({
+                                        video: { deviceId: { exact: matched.deviceId } },
+                                        audio: false
+                                    });
+                                } else {
+                                    throw new Error('No device match');
+                                }
+                            } catch (e3) {
+                                // Tier 4: Basic string facingMode
+                                try {
+                                    stream = await navigator.mediaDevices.getUserMedia({
+                                        video: { facingMode: (isCar ? 'environment' : currentCameraFacing) },
+                                        audio: false
+                                    });
+                                } catch (e4) {
+                                    // Tier 5: Direct Chrome permission prompt fallback (prompts "Allow camera?")
+                                    stream = await navigator.mediaDevices.getUserMedia({
+                                        video: true,
+                                        audio: false
+                                    });
+                                }
                             }
                         }
                     }
@@ -2746,11 +2785,14 @@
                 await laptopVideoElem.play();
                 isLaptopStreaming = true;
 
-                addTerminalLog('HARDWARE', `${isBack ? '📷 BACK CAMERA (ROAD)' : '🤳 FRONT CAMERA (CABIN)'} ONLINE // Streaming to AI engine`);
+                const camTag = isCar ? '🚗 CAR DASH CAM (USB)' : (isBack ? '📷 BACK CAMERA (ROAD)' : '🤳 FRONT CAMERA (CABIN)');
+                addTerminalLog('HARDWARE', `${camTag} ONLINE // Streaming to AI engine`);
                 transmitLaptopFrames();
+                return true;
             } catch (err) {
                 console.warn('Camera activation notice:', err);
                 addTerminalLog('HARDWARE', `Camera access notice: ${err.message || 'Permission denied'}`, 'crit');
+                return false;
             }
         }
 
@@ -2866,7 +2908,11 @@
                     }
 
                     const vSel = document.getElementById('videoSelect');
-                    const targetEndpoint = (vSel && vSel.value === 'phone') ? '/api/phone_frame' : '/api/laptop_frame';
+                    let targetEndpoint = '/api/laptop_frame';
+                    if (vSel) {
+                        if (vSel.value === 'phone') targetEndpoint = '/api/phone_frame';
+                        else if (vSel.value === 'car') targetEndpoint = '/api/car_frame';
+                    }
 
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 1200);
@@ -4135,7 +4181,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=10').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=11').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
