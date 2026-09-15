@@ -2634,21 +2634,18 @@
                     addTerminalLog('DASHCAM-CTL', '📱 MOBILE DASH CAM: Awaiting connection from phone (/camera or Wi-Fi)');
                 }
             } else if (device === 'laptop') {
-                if (isMobile) {
-                    currentCameraFacing = 'user';
-                    updateCameraFacingUI();
-                    if (subLaptop) subLaptop.textContent = '🟢 Cabin View (Front Camera)';
-                    if (pillLaptop) { pillLaptop.textContent = 'CABIN'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
-                    updateSourceRibbonUI('laptop', 'Mobile front cabin camera active', true);
-                    showFloatingSourcePill('🤳', 'CABIN VIEW: Front Camera Active');
-                    await activateDeviceCamera('user');
-                } else {
-                    stopLaptopWebcam(); // Direct native hardware capture on PC (Cam 0 @ 40+ FPS)
-                    if (subLaptop) subLaptop.textContent = '🟢 Built-in Laptop Webcam Active';
-                    if (pillLaptop) { pillLaptop.textContent = 'ONLINE'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
-                    updateSourceRibbonUI('laptop', 'Built-in laptop webcam active @ 30+ FPS', true);
-                    showFloatingSourcePill('💻', 'LAPTOP DASH CAM: Built-in Webcam Active');
+                currentCameraFacing = 'user';
+                updateCameraFacingUI();
+                if (subLaptop) subLaptop.textContent = isMobile ? '🟢 Cabin View (Front Camera)' : '🟢 Built-in Laptop Webcam Active';
+                if (pillLaptop) { pillLaptop.textContent = isMobile ? 'CABIN' : 'ONLINE'; pillLaptop.className = 'dashcam-pill pill-laptop'; }
+                updateSourceRibbonUI('laptop', isMobile ? 'Mobile front cabin camera active' : 'Built-in laptop webcam active @ 30+ FPS', true);
+                showFloatingSourcePill(isMobile ? '🤳' : '💻', isMobile ? 'CABIN VIEW: Front Camera Active' : 'LAPTOP DASH CAM: Built-in Webcam Active');
+                addTerminalLog('HARDWARE', '💻 LAPTOP DASH CAM: Requesting webcam permissions...');
+                const camSuccess = await activateDeviceCamera('user');
+                if (camSuccess) {
                     addTerminalLog('HARDWARE', '💻 LAPTOP DASH CAM: Built-in webcam activated');
+                } else {
+                    addTerminalLog('HARDWARE', '💻 LAPTOP DASH CAM: Camera permission not granted or device busy', 'crit');
                 }
             }
 
@@ -4181,7 +4178,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=11').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=12').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
