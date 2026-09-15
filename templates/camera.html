@@ -348,8 +348,8 @@
                 activeMediaStream = stream;
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    canvas.width = 400;
-                    canvas.height = 225;
+                    canvas.width = 640;
+                    canvas.height = 360;
                     const camLabel = isBack ? '📷 ROAD CAM READY' : '🤳 CABIN CAM READY';
                     statusPill.textContent = `${camLabel} (720p HD)`;
                     statusPill.style.color = '#00ff66';
@@ -433,7 +433,7 @@
             }
 
             activePhoneUploads = 1;
-            ctx.drawImage(video, 0, 0, 400, 225);
+            ctx.drawImage(video, 0, 0, 640, 360);
 
             const nowTs = Date.now();
             canvas.toBlob((blob) => {
@@ -473,7 +473,7 @@
                         scheduleNext();
                     }
                 });
-            }, 'image/jpeg', 0.30);
+            }, 'image/jpeg', 0.55);
         }
 
         function stopBroadcast() {

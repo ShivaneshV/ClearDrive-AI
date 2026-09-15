@@ -2688,8 +2688,8 @@
                 }
                 if (!laptopCanvas) {
                     laptopCanvas = document.createElement('canvas');
-                    laptopCanvas.width = 400;
-                    laptopCanvas.height = 225;
+                    laptopCanvas.width = 640;
+                    laptopCanvas.height = 360;
                     laptopCanvas.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
                     document.body.appendChild(laptopCanvas);
                 }
@@ -2894,7 +2894,7 @@
 
                 isUploadingFrame = true;
                 const ctx = laptopCanvas.getContext('2d');
-                ctx.drawImage(laptopVideoElem, 0, 0, 400, 225);
+                ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
 
                 const nowTs = Date.now();
                 laptopCanvas.toBlob(blob => {
@@ -2931,7 +2931,7 @@
                             laptopUploadTimer = setTimeout(sendNext, 12);
                         }
                     });
-                }, 'image/jpeg', 0.30);
+                }, 'image/jpeg', 0.55);
             }
 
             if (laptopUploadTimer) clearTimeout(laptopUploadTimer);
@@ -4189,7 +4189,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=13').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=14').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
