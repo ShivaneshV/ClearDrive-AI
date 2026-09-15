@@ -1,6 +1,6 @@
 export default {
   async fetch(request, env, ctx) {
-    let backend = "https://sen-chances-immigration-taxes.trycloudflare.com";
+    let backend = "https://footage-inputs-decrease-smart.trycloudflare.com";
     try {
       const res = await fetch("https://raw.githubusercontent.com/ShivaneshV/ClearDrive-AI/main/tunnel_url.txt?t=" + Date.now(), {
         headers: { "User-Agent": "ClearDriveWorker/1.0" },
