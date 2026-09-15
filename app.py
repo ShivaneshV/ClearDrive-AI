@@ -580,9 +580,13 @@ def process_video():
             # Priority 1: Browser capture upload (if remote mobile/browser client is actively transmitting)
             with lock:
                 has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 2.5)
+                has_car_stream = (car_frame_buffer is not None) and ((now - car_last_seen) < 2.5)
                 if has_laptop_stream:
                     raw_frame = laptop_frame_buffer.copy()
                     display_clip = "💻 LIVE LAPTOP DASH CAM (BROWSER)"
+                elif has_car_stream:
+                    raw_frame = car_frame_buffer.copy()
+                    display_clip = "🚗 LIVE DASH CAM (CLIENT BROWSER)"
 
             if raw_frame is None:
                 # Priority 2: Direct native hardware webcam on host PC (0ms lag, 30 FPS)
@@ -604,9 +608,13 @@ def process_video():
             # Priority 1: Browser upload from Car Android TV / USB Camera
             with lock:
                 has_car_stream = (car_frame_buffer is not None) and ((now - car_last_seen) < 2.5)
+                has_laptop_stream = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 2.5)
                 if has_car_stream:
                     raw_frame = car_frame_buffer.copy()
                     display_clip = "🚗 LIVE CAR DASH CAM (ANDROID TV/USB)"
+                elif has_laptop_stream:
+                    raw_frame = laptop_frame_buffer.copy()
+                    display_clip = "💻 LIVE DASH CAM (CLIENT BROWSER)"
 
             # Priority 2: Direct physical USB Dashcam plugged into host machine
             if raw_frame is None and external_usb_cam_connected:
@@ -654,22 +662,38 @@ def process_video():
                     ret, raw_frame = cap.read() if cap else (False, None)
 
         # -------------------------------------------------------------
-        # Case 5: Autonomous Looping Video Playlist (src == 'auto')
+        # Case 5: Autonomous Looping Video Playlist or Auto-Engage Active Stream (src == 'auto')
         # -------------------------------------------------------------
         else:
-            if cap is None or not cap.isOpened() or last_opened_source != 'auto':
-                current_video_file = PLAYLIST[playlist_index]
-                resolved_path = resolve_video_path(current_video_file)
-                cap = cv2.VideoCapture(resolved_path)
-                last_opened_source = 'auto'
-                time.sleep(0.03)
+            with lock:
+                has_car_live = (car_frame_buffer is not None) and ((now - car_last_seen) < 2.5)
+                has_laptop_live = (laptop_frame_buffer is not None) and ((now - laptop_last_seen) < 2.5)
+                has_phone_live = (phone_frame_buffer is not None) and ((now - phone_last_seen) < 3.0)
 
-            ret, raw_frame = cap.read() if cap is not None else (False, None)
-            if not ret or raw_frame is None:
-                if cap: cap.release(); cap = None
-                engine.reset_history()
-                playlist_index = (playlist_index + 1) % len(PLAYLIST)
-                continue
+                if has_car_live:
+                    raw_frame = car_frame_buffer.copy()
+                    display_clip = "🚗 LIVE CAR DASH CAM (AUTO)"
+                elif has_laptop_live:
+                    raw_frame = laptop_frame_buffer.copy()
+                    display_clip = "💻 LIVE LAPTOP DASH CAM (AUTO)"
+                elif has_phone_live:
+                    raw_frame = phone_frame_buffer.copy()
+                    display_clip = "📱 LIVE MOBILE DASH CAM (AUTO)"
+
+            if raw_frame is None:
+                if cap is None or not cap.isOpened() or last_opened_source != 'auto':
+                    current_video_file = PLAYLIST[playlist_index]
+                    resolved_path = resolve_video_path(current_video_file)
+                    cap = cv2.VideoCapture(resolved_path)
+                    last_opened_source = 'auto'
+                    time.sleep(0.03)
+
+                ret, raw_frame = cap.read() if cap is not None else (False, None)
+                if not ret or raw_frame is None:
+                    if cap: cap.release(); cap = None
+                    engine.reset_history()
+                    playlist_index = (playlist_index + 1) % len(PLAYLIST)
+                    continue
 
         if raw_frame is None or raw_frame.size == 0:
             time.sleep(0.01)

@@ -1957,8 +1957,8 @@
 
                 <!-- FLOATING IN-VIDEO CAMERA ORIENTATION & LENS TOOLBAR (Always Visible Over Video) -->
                 <div class="stream-cam-overlay" id="streamCamOverlay">
-                    <button class="overlay-cam-btn" id="btn-overlay-cam-facing" onclick="toggleDeviceCameraFacing()" title="Switch between Road (Back) and Cabin (Front) Camera">
-                        <span id="overlayCamIcon">📷</span> <span id="overlayFacingLabel">BACK CAM (ROAD)</span>
+                    <button class="overlay-cam-btn" id="btn-overlay-cam-facing" onclick="cycleCameraDevice()" title="Switch between USB Dashcam and Cabin/Laptop Webcam">
+                        <span id="overlayCamIcon">🔄</span> <span id="overlayFacingLabel">SWITCH CAMERA</span>
                     </button>
                     <button class="overlay-cam-btn flip-highlight" id="btn-overlay-180" onclick="toggle180()" title="1-Click Fix for Inverted / Upside Down Camera">
                         <span>🙃</span> FLIP 180° (UPSIDE DOWN FIX)
@@ -2134,6 +2134,12 @@
             <!-- CAMERA TURN & LENS SELECTOR CONTROLS -->
             <div class="camera-turn-strip">
                 <span class="turn-strip-label"><span>🔄</span> CAMERA & LENS CONTROLS:</span>
+                <button class="turn-btn turn-highlight" id="btn-cycle-camera" onclick="cycleCameraDevice()" style="background: rgba(0, 243, 255, 0.25); border: 1.5px solid var(--cyan-neon); color: #fff; font-weight: bold;" title="Switch between USB Dashcam and Laptop/Cabin Webcam">
+                    <span>🔄</span> SWITCH CAMERA (DASHCAM ↔ WEBCAM)
+                </button>
+                <select id="cameraDeviceSelector" onchange="switchToSpecificCamera(this.value)" style="background: #0d1a2d; color: #00f3ff; border: 1.5px solid var(--cyan-neon); border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; font-family: monospace; font-weight: bold; cursor: pointer; max-width: 250px;" title="Direct Camera Hardware Selector">
+                    <option value="">🔍 Scanning Cameras...</option>
+                </select>
                 <button class="turn-btn turn-active" id="btn-facing-road" onclick="setDeviceCameraFacing('environment')" title="Road Dashcam (Back/Rear Camera)">
                     <span>📷</span> BACK CAM (ROAD)
                 </button>
@@ -2480,6 +2486,179 @@
             }
         }
 
+        let activeVideoDevicesList = [];
+        let activeCamIndex = 0;
+        let activeSelectedDeviceId = null;
+
+        function classifyCamera(device) {
+            const label = (device.label || '').toLowerCase();
+            const isBuiltIn = /integrated|internal|built-in|facetime|front|selfie|user|cabin/i.test(label);
+            const isUsbRoad = /usb|uvc|dash|external|rear|back|environment|road/i.test(label) && !isBuiltIn;
+            return { isBuiltIn, isUsbRoad, label: device.label || `Camera (${device.deviceId ? device.deviceId.slice(0, 6) : 'Node'})` };
+        }
+
+        async function refreshCameraDeviceList() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                return [];
+            }
+            try {
+                let devices = await navigator.mediaDevices.enumerateDevices();
+                let videoDevs = devices.filter(d => d.kind === 'videoinput');
+
+                // If Chrome hasn't granted permission yet, device labels are blank ("").
+                // A quick permission probe unlocks all hardware device labels.
+                if (videoDevs.length > 0 && videoDevs.every(d => !d.label)) {
+                    try {
+                        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                        tempStream.getTracks().forEach(t => t.stop());
+                        devices = await navigator.mediaDevices.enumerateDevices();
+                        videoDevs = devices.filter(d => d.kind === 'videoinput');
+                    } catch (ePerm) {
+                        console.warn('Initial permission prompt probe notice:', ePerm);
+                    }
+                }
+
+                activeVideoDevicesList = videoDevs;
+                updateCameraSelectorDropdown();
+                return videoDevs;
+            } catch (err) {
+                console.warn('refreshCameraDeviceList err:', err);
+                return [];
+            }
+        }
+
+        function updateCameraSelectorDropdown() {
+            const sel = document.getElementById('cameraDeviceSelector');
+            if (!sel) return;
+            sel.innerHTML = '';
+            if (activeVideoDevicesList.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '⚠️ No Camera Detected';
+                sel.appendChild(opt);
+                return;
+            }
+            activeVideoDevicesList.forEach((dev, idx) => {
+                const opt = document.createElement('option');
+                opt.value = dev.deviceId;
+                let label = dev.label || `Camera ${idx + 1}`;
+                if (dev.deviceId === activeSelectedDeviceId) {
+                    opt.selected = true;
+                    opt.textContent = `🟢 ${label} (ACTIVE)`;
+                } else {
+                    opt.textContent = `📷 ${label}`;
+                }
+                sel.appendChild(opt);
+            });
+        }
+
+        function pickBestRoadDashcam(videoDevs) {
+            if (!videoDevs || videoDevs.length === 0) return null;
+            if (videoDevs.length === 1) return videoDevs[0];
+
+            // 1. Explicit USB / UVC / Dash / Rear camera (excluding built-in terms)
+            const explicitUsb = videoDevs.find(d => classifyCamera(d).isUsbRoad);
+            if (explicitUsb) return explicitUsb;
+
+            // 2. Any camera not flagged as built-in / front / user
+            const nonBuiltIn = videoDevs.find(d => !classifyCamera(d).isBuiltIn);
+            if (nonBuiltIn) return nonBuiltIn;
+
+            // 3. Fallback: on Windows & Android TV, external USB dashcam is enumerated last
+            return videoDevs[videoDevs.length - 1];
+        }
+
+        function pickBestCabinWebcam(videoDevs) {
+            if (!videoDevs || videoDevs.length === 0) return null;
+            if (videoDevs.length === 1) return videoDevs[0];
+
+            const builtIn = videoDevs.find(d => classifyCamera(d).isBuiltIn);
+            if (builtIn) return builtIn;
+            return videoDevs[0];
+        }
+
+        async function switchToSpecificCamera(deviceId) {
+            if (!deviceId) return false;
+            try {
+                const devs = await refreshCameraDeviceList();
+                const targetDev = devs.find(d => d.deviceId === deviceId) || devs[0];
+                if (!targetDev) return false;
+
+                const camLabel = targetDev.label || 'Camera';
+                activeSelectedDeviceId = targetDev.deviceId;
+                activeCamIndex = devs.findIndex(d => d.deviceId === targetDev.deviceId);
+                if (activeCamIndex < 0) activeCamIndex = 0;
+
+                addTerminalLog('HARDWARE', `🔄 SWITCHING CAMERA (${activeCamIndex + 1}/${devs.length}): ${camLabel}`);
+                showFloatingSourcePill('📷', `SWITCHED: ${camLabel}`);
+
+                stopLaptopWebcam();
+
+                if (!laptopVideoElem) {
+                    laptopVideoElem = document.createElement('video');
+                    laptopVideoElem.setAttribute('autoplay', '');
+                    laptopVideoElem.setAttribute('playsinline', '');
+                    laptopVideoElem.setAttribute('muted', '');
+                    laptopVideoElem.muted = true;
+                    laptopVideoElem.playsInline = true;
+                    laptopVideoElem.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;opacity:0.01;pointer-events:none;z-index:-999;";
+                    document.body.appendChild(laptopVideoElem);
+                }
+                if (!laptopCanvas) {
+                    laptopCanvas = document.createElement('canvas');
+                    laptopCanvas.width = 640;
+                    laptopCanvas.height = 360;
+                    laptopCanvas.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
+                    document.body.appendChild(laptopCanvas);
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: { exact: targetDev.deviceId }, width: { ideal: 640 }, height: { ideal: 360 } },
+                    audio: false
+                });
+
+                if (stream) {
+                    laptopWebcamStream = stream;
+                    laptopVideoElem.srcObject = stream;
+                    laptopVideoElem.muted = true;
+                    laptopVideoElem.playsInline = true;
+                    try {
+                        const p = laptopVideoElem.play();
+                        if (p !== undefined) await p;
+                    } catch (ePlay) {}
+                    isLaptopStreaming = true;
+                    transmitLaptopFrames();
+                    updateCameraSelectorDropdown();
+                    addTerminalLog('HARDWARE', `🟢 ACTIVE CAMERA: ${camLabel}`);
+                    return true;
+                }
+            } catch (err) {
+                console.warn('Switch camera error:', err);
+                addTerminalLog('HARDWARE', `Could not switch camera: ${err.message}`, 'crit');
+            }
+            return false;
+        }
+
+        async function cycleCameraDevice() {
+            try {
+                const devs = await refreshCameraDeviceList();
+                if (devs.length <= 1) {
+                    const currentName = devs[0] ? (devs[0].label || 'Default Camera') : 'Camera';
+                    addTerminalLog('HARDWARE', `Only 1 camera detected (${currentName}). If USB Dash Cam is plugged in, check cable. On Android TV: Force Stop HDVR app to release USB.`, 'warn');
+                    showFloatingSourcePill('📷', `CAMERA: ${currentName}`);
+                    const altFacing = (currentCameraFacing === 'environment') ? 'user' : 'environment';
+                    await setDeviceCameraFacing(altFacing);
+                    return;
+                }
+
+                activeCamIndex = (activeCamIndex + 1) % devs.length;
+                const nextCam = devs[activeCamIndex];
+                await switchToSpecificCamera(nextCam.deviceId);
+            } catch (err) {
+                console.error('cycleCameraDevice error:', err);
+            }
+        }
+
         async function setDeviceCameraFacing(mode) {
             currentCameraFacing = mode;
             updateCameraFacingUI();
@@ -2487,8 +2666,7 @@
         }
 
         async function toggleDeviceCameraFacing() {
-            const newFacing = (currentCameraFacing === 'environment') ? 'user' : 'environment';
-            await setDeviceCameraFacing(newFacing);
+            await cycleCameraDevice();
         }
 
         function showFloatingSourcePill(icon, text) {
@@ -2668,7 +2846,7 @@
             const isCar = (currentCameraFacing === 'car');
             const isBack = (currentCameraFacing === 'environment');
             const logName = isCar ? 'CAR DASH CAM (USB)' : (isBack ? 'BACK/ROAD' : 'FRONT/CABIN');
-            addTerminalLog('HARDWARE', `Requesting ${logName} camera permissions...`);
+            addTerminalLog('HARDWARE', `Requesting ${logName} camera access...`);
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 addTerminalLog('HARDWARE', 'Camera requires HTTPS or localhost context.', 'crit');
                 return false;
@@ -2683,6 +2861,8 @@
                     laptopVideoElem.setAttribute('autoplay', '');
                     laptopVideoElem.setAttribute('playsinline', '');
                     laptopVideoElem.setAttribute('muted', '');
+                    laptopVideoElem.muted = true;
+                    laptopVideoElem.playsInline = true;
                     laptopVideoElem.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;opacity:0.01;pointer-events:none;z-index:-999;";
                     document.body.appendChild(laptopVideoElem);
                 }
@@ -2695,26 +2875,42 @@
                 }
 
                 let stream = null;
+                const devs = await refreshCameraDeviceList();
+                let selectedDev = null;
 
-                // Priority 0: For Car Dash Cam, scan for USB / UVC / External cameras first
-                if (isCar) {
-                    try {
-                        const devices = await navigator.mediaDevices.enumerateDevices();
-                        const videoDevs = devices.filter(d => d.kind === 'videoinput');
-                        const usbDev = videoDevs.find(d => /usb|uvc|dash|external|cam/i.test(d.label)) || videoDevs.find(d => /back|rear|environment/i.test(d.label)) || videoDevs[videoDevs.length - 1];
-                        if (usbDev && usbDev.deviceId) {
+                // Priority 0: Exact deviceId selection based on intelligent hardware classification
+                if (devs.length > 0) {
+                    if (isCar || isBack) {
+                        selectedDev = pickBestRoadDashcam(devs);
+                    } else {
+                        selectedDev = pickBestCabinWebcam(devs);
+                    }
+
+                    if (selectedDev && selectedDev.deviceId) {
+                        try {
                             stream = await navigator.mediaDevices.getUserMedia({
-                                video: { deviceId: { exact: usbDev.deviceId }, width: { ideal: 640 }, height: { ideal: 360 } },
+                                video: {
+                                    deviceId: { exact: selectedDev.deviceId },
+                                    width: { ideal: 640 },
+                                    height: { ideal: 360 }
+                                },
                                 audio: false
                             });
+                            if (stream) {
+                                activeSelectedDeviceId = selectedDev.deviceId;
+                                activeCamIndex = devs.findIndex(d => d.deviceId === selectedDev.deviceId);
+                                if (activeCamIndex < 0) activeCamIndex = 0;
+                            }
+                        } catch (eDev) {
+                            console.warn('Exact deviceId selection notice:', eDev);
                         }
-                    } catch (eUsb) {}
+                    }
                 }
 
-                // Tier 1: Try ideal facingMode constraint (never throws OverconstrainedError on mobile)
+                // Tier 1: Try ideal facingMode constraint
                 if (!stream) {
                     try {
-                        const facingTarget = isCar ? 'environment' : currentCameraFacing;
+                        const facingTarget = (isCar || isBack) ? 'environment' : 'user';
                         stream = await navigator.mediaDevices.getUserMedia({
                             video: {
                                 facingMode: { ideal: facingTarget },
@@ -2724,53 +2920,14 @@
                             audio: false
                         });
                     } catch (e1) {
-                        // Tier 2: Try exact facingMode constraint
+                        // Tier 2: Basic video fallback
                         try {
-                            const facingTarget = isCar ? 'environment' : currentCameraFacing;
                             stream = await navigator.mediaDevices.getUserMedia({
-                                video: {
-                                    facingMode: { exact: facingTarget },
-                                    width: { ideal: 640 },
-                                    height: { ideal: 360 }
-                                },
+                                video: true,
                                 audio: false
                             });
                         } catch (e2) {
-                            // Tier 3: Device enumeration search
-                            try {
-                                const devices = await navigator.mediaDevices.enumerateDevices();
-                                const videoDevs = devices.filter(d => d.kind === 'videoinput');
-                                let matched = null;
-                                if (isCar) {
-                                    matched = videoDevs.find(d => /usb|uvc|dash|external/i.test(d.label)) || videoDevs[videoDevs.length - 1] || videoDevs[0];
-                                } else if (isBack) {
-                                    matched = videoDevs.find(d => /back|rear|environment/i.test(d.label)) || videoDevs[videoDevs.length - 1];
-                                } else {
-                                    matched = videoDevs.find(d => /front|user|selfie/i.test(d.label)) || videoDevs[0];
-                                }
-                                if (matched && matched.deviceId) {
-                                    stream = await navigator.mediaDevices.getUserMedia({
-                                        video: { deviceId: { exact: matched.deviceId } },
-                                        audio: false
-                                    });
-                                } else {
-                                    throw new Error('No device match');
-                                }
-                            } catch (e3) {
-                                // Tier 4: Basic string facingMode
-                                try {
-                                    stream = await navigator.mediaDevices.getUserMedia({
-                                        video: { facingMode: (isCar ? 'environment' : currentCameraFacing) },
-                                        audio: false
-                                    });
-                                } catch (e4) {
-                                    // Tier 5: Direct Chrome permission prompt fallback (prompts "Allow camera?")
-                                    stream = await navigator.mediaDevices.getUserMedia({
-                                        video: true,
-                                        audio: false
-                                    });
-                                }
-                            }
+                            throw new Error("Could not acquire video stream");
                         }
                     }
                 }
@@ -2779,12 +2936,24 @@
 
                 laptopWebcamStream = stream;
                 laptopVideoElem.srcObject = stream;
-                await laptopVideoElem.play();
-                isLaptopStreaming = true;
+                laptopVideoElem.muted = true;
+                laptopVideoElem.playsInline = true;
+                try {
+                    const p = laptopVideoElem.play();
+                    if (p !== undefined) await p;
+                } catch (ePlay) {}
 
-                const camTag = isCar ? '🚗 CAR DASH CAM (USB)' : (isBack ? '📷 BACK CAMERA (ROAD)' : '🤳 FRONT CAMERA (CABIN)');
-                addTerminalLog('HARDWARE', `${camTag} ONLINE // Streaming to AI engine`);
+                isLaptopStreaming = true;
                 transmitLaptopFrames();
+
+                // Refresh device list to capture labels now that permission is active
+                setTimeout(async () => {
+                    await refreshCameraDeviceList();
+                }, 400);
+
+                const activeName = (selectedDev && selectedDev.label) ? selectedDev.label : (isCar ? 'USB Dash Cam' : (isBack ? 'Road Camera' : 'Webcam'));
+                addTerminalLog('HARDWARE', `🟢 ACTIVE CAMERA: ${activeName}`);
+                showFloatingSourcePill('📷', `ONLINE: ${activeName}`);
                 return true;
             } catch (err) {
                 console.warn('Camera activation notice:', err);
@@ -2906,9 +3075,12 @@
 
                     const vSel = document.getElementById('videoSelect');
                     let targetEndpoint = '/api/laptop_frame';
-                    if (vSel) {
-                        if (vSel.value === 'phone') targetEndpoint = '/api/phone_frame';
-                        else if (vSel.value === 'car') targetEndpoint = '/api/car_frame';
+                    if (vSel && vSel.value === 'car') {
+                        targetEndpoint = '/api/car_frame';
+                    } else if (vSel && vSel.value === 'phone') {
+                        targetEndpoint = '/api/phone_frame';
+                    } else if (currentCameraFacing === 'car' || currentCameraFacing === 'environment') {
+                        targetEndpoint = '/api/car_frame';
                     }
 
                     const controller = new AbortController();
@@ -4189,7 +4361,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=14').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=15').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
@@ -4263,10 +4435,22 @@
             }
         }
 
-        // Initialize Map & GPS on Page Load
+        // Initialize Map, GPS & Camera Detection on Page Load
         window.addEventListener('load', () => {
             initNavMap();
             initRealtimeGPS();
+
+            // Auto-detect connected cameras and populate hardware switcher
+            refreshCameraDeviceList().catch(() => {});
+
+            // Listen for USB Dashcam plug/unplug events
+            if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+                navigator.mediaDevices.addEventListener('devicechange', async () => {
+                    addTerminalLog('HARDWARE', '🔌 USB camera hardware change detected. Updating camera list...');
+                    await refreshCameraDeviceList();
+                    showFloatingSourcePill('🔌', 'CAMERA LIST UPDATED');
+                });
+            }
 
             // Auto-configure Mobile Camera URL based on current host & protocol
             const modalLink = document.getElementById('modalUrlLink');
