@@ -2688,8 +2688,8 @@
                 }
                 if (!laptopCanvas) {
                     laptopCanvas = document.createElement('canvas');
-                    laptopCanvas.width = 480;
-                    laptopCanvas.height = 270;
+                    laptopCanvas.width = 400;
+                    laptopCanvas.height = 225;
                     laptopCanvas.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
                     document.body.appendChild(laptopCanvas);
                 }
@@ -2880,27 +2880,27 @@
             }).catch(e => {});
         }
 
-        let activeDeviceUploads = 0;
+        let isUploadingFrame = false;
         function transmitLaptopFrames() {
             if (!isLaptopStreaming || !laptopVideoElem) return;
 
             function sendNext() {
                 if (!isLaptopStreaming) return;
 
-                if (activeDeviceUploads >= 2 || laptopVideoElem.readyState < 2) {
-                    laptopUploadTimer = setTimeout(sendNext, 12);
+                if (isUploadingFrame || laptopVideoElem.readyState < 2) {
+                    laptopUploadTimer = setTimeout(sendNext, 8);
                     return;
                 }
 
-                activeDeviceUploads++;
+                isUploadingFrame = true;
                 const ctx = laptopCanvas.getContext('2d');
-                ctx.drawImage(laptopVideoElem, 0, 0, 480, 270);
+                ctx.drawImage(laptopVideoElem, 0, 0, 400, 225);
 
                 const nowTs = Date.now();
                 laptopCanvas.toBlob(blob => {
                     if (!blob || !isLaptopStreaming) {
-                        activeDeviceUploads = Math.max(0, activeDeviceUploads - 1);
-                        laptopUploadTimer = setTimeout(sendNext, 12);
+                        isUploadingFrame = false;
+                        laptopUploadTimer = setTimeout(sendNext, 8);
                         return;
                     }
 
@@ -2912,7 +2912,7 @@
                     }
 
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 1200);
+                    const timeoutId = setTimeout(() => controller.abort(), 900);
 
                     fetch(targetEndpoint, {
                         method: 'POST',
@@ -2926,21 +2926,16 @@
                     .catch(() => {})
                     .finally(() => {
                         clearTimeout(timeoutId);
-                        activeDeviceUploads = Math.max(0, activeDeviceUploads - 1);
+                        isUploadingFrame = false;
                         if (isLaptopStreaming) {
-                            laptopUploadTimer = setTimeout(sendNext, 4);
+                            laptopUploadTimer = setTimeout(sendNext, 12);
                         }
                     });
-
-                    // Schedule next frame in pipeline if capacity available
-                    if (activeDeviceUploads < 2 && isLaptopStreaming) {
-                        laptopUploadTimer = setTimeout(sendNext, 16);
-                    }
-                }, 'image/jpeg', 0.38);
+                }, 'image/jpeg', 0.30);
             }
 
             if (laptopUploadTimer) clearTimeout(laptopUploadTimer);
-            activeDeviceUploads = 0;
+            isUploadingFrame = false;
             sendNext();
         }
 
@@ -3132,15 +3127,31 @@
         document.addEventListener('mozfullscreenchange', syncFullscreenState);
         document.addEventListener('MSFullscreenChange', syncFullscreenState);
 
-        // Double-click / double-tap video feed to toggle fullscreen mode
+        // Instant Buffer-Flush & Stream Resync (Restores 0ms real-time stream)
+        function resyncStream() {
+            const vStream = document.getElementById('videoStream');
+            if (vStream) {
+                vStream.src = '/video_feed?t=' + Date.now();
+                showFloatingSourcePill('⚡', 'STREAM FLUSHED: 0ms Real-Time');
+                addTerminalLog('STREAM', '⚡ Video stream buffer flushed // Synced to live moment');
+            }
+        }
+
+        // Tap video feed to instantly resync lag; Double-tap to toggle fullscreen
         let lastVideoTapTime = 0;
+        let tapTimeout = null;
         function handleVideoTap(e) {
             const now = Date.now();
             if (now - lastVideoTapTime < 350) {
+                if (tapTimeout) clearTimeout(tapTimeout);
                 toggleFullscreen();
                 lastVideoTapTime = 0;
             } else {
                 lastVideoTapTime = now;
+                if (tapTimeout) clearTimeout(tapTimeout);
+                tapTimeout = setTimeout(() => {
+                    resyncStream();
+                }, 360);
             }
         }
 
@@ -4178,13 +4189,14 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=12').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=13').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
                     document.addEventListener('visibilitychange', () => {
                         if (document.visibilityState === 'visible') {
                             reg.update().catch(() => {});
+                            if (typeof resyncStream === 'function') resyncStream();
                         }
                     });
                 }).catch(() => {});

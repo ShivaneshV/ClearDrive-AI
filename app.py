@@ -798,9 +798,9 @@ def process_video():
 
         v2v_status_str = f"{active_v2v_payload['event']} ({active_v2v_payload['distance']})" if active_v2v_payload else "V2V MESH ACTIVE // LISTENING"
 
-        # Encode single high-efficiency JPEG buffer for all streaming clients (fast encoding, zero generator overhead)
+        # Encode single ultra-efficient JPEG buffer for all streaming clients (low bandwidth, zero buffer bloat)
         ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
-            int(cv2.IMWRITE_JPEG_QUALITY), 44,
+            int(cv2.IMWRITE_JPEG_QUALITY), 34,
             int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
         ])
 
@@ -849,9 +849,9 @@ def process_video():
                 frame_seq_id += 1
             frame_condition.notify_all()
 
-        # Smooth Universal Pacing: ~30 FPS with Zero-Lag Adaptive Sleep
+        # Smooth Universal Pacing: ~26 FPS with Zero-Lag Adaptive Sleep
         elapsed = time.time() - start_process
-        target_frame_time = 0.0333
+        target_frame_time = 0.038
         sleep_needed = target_frame_time - elapsed
         if sleep_needed > 0.001:
             time.sleep(sleep_needed)

@@ -348,8 +348,8 @@
                 activeMediaStream = stream;
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    canvas.width = 480;
-                    canvas.height = 270;
+                    canvas.width = 400;
+                    canvas.height = 225;
                     const camLabel = isBack ? '📷 ROAD CAM READY' : '🤳 CABIN CAM READY';
                     statusPill.textContent = `${camLabel} (720p HD)`;
                     statusPill.style.color = '#00ff66';
@@ -427,24 +427,24 @@
         function transmitNextFrame() {
             if (!isStreaming) return;
 
-            if (activePhoneUploads >= 2 || video.readyState < 2) {
+            if (activePhoneUploads >= 1 || video.readyState < 2) {
                 scheduleNext();
                 return;
             }
 
-            activePhoneUploads++;
-            ctx.drawImage(video, 0, 0, 480, 270);
+            activePhoneUploads = 1;
+            ctx.drawImage(video, 0, 0, 400, 225);
 
             const nowTs = Date.now();
             canvas.toBlob((blob) => {
                 if (!blob || !isStreaming) {
-                    activePhoneUploads = Math.max(0, activePhoneUploads - 1);
+                    activePhoneUploads = 0;
                     scheduleNext();
                     return;
                 }
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1200);
+                const timeoutId = setTimeout(() => controller.abort(), 900);
 
                 fetch('/api/phone_frame', {
                     method: 'POST',
@@ -468,17 +468,12 @@
                 .catch(() => {})
                 .finally(() => {
                     clearTimeout(timeoutId);
-                    activePhoneUploads = Math.max(0, activePhoneUploads - 1);
+                    activePhoneUploads = 0;
                     if (isStreaming) {
                         scheduleNext();
                     }
                 });
-
-                // Pipeline: schedule next frame immediately if slot open
-                if (activePhoneUploads < 2 && isStreaming) {
-                    scheduleNext();
-                }
-            }, 'image/jpeg', 0.38);
+            }, 'image/jpeg', 0.30);
         }
 
         function stopBroadcast() {
