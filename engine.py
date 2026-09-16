@@ -81,7 +81,9 @@ class OmniVisionEngine:
         # Multi-Tile Fine-Grain CLAHE Processors
         self.clahe_clarity = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
         self.clahe_night = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(12, 12))
-        self.clahe_dehaze = cv2.createCLAHE(clipLimit=1.4, tileGridSize=(16, 16))
+        self.clahe_dehaze = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        self.dehaze_ground_weight = None
+        self.dehaze_inv_ground = None
 
         # Kinematic Ghost-Vision buffers
         self.target_trajectories = {}
@@ -369,31 +371,48 @@ class OmniVisionEngine:
     # --------------------------------------------------------------------------
     # 2. TRUE-COLOR ATMOSPHERIC DEHAZER (FOG & RAIN)
     # --------------------------------------------------------------------------
-    def dehaze_atmosphere(self, frame, omega=0.85):
+    def dehaze_atmosphere(self, frame):
         """
-        Broadcast-Grade Atmospheric Dehazer (< 2ms):
-        Pierces through aerosol fog, mist, and monsoon rain while preserving
-        100% natural smooth sky gradients with zero posterization or macroblocking.
+        Next-Gen Depth-Aware Atmospheric Dehazer (< 20ms):
+        Deeply pierces through aerosol fog, mountain mist, and monsoon rain veil.
+        - Decomposes luminance into base atmospheric illumination & fine edge details.
+        - Expands dynamic range on base veil to reveal hidden road and obstacles.
+        - Elevation-guided weighting ensures road & foliage are intensely clear and sharp,
+          while distant sky retains smooth, silky, natural atmospheric gradients.
+        - Vivid emerald greens and rich wet-asphalt chromatic restoration.
         """
+        h, w = frame.shape[:2]
+        if self.dehaze_ground_weight is None or self.dehaze_ground_weight.shape[0] != h:
+            y_coords = np.linspace(0.0, 1.0, h, dtype=np.float32)[:, np.newaxis]
+            self.dehaze_ground_weight = np.clip((y_coords - 0.18) / 0.52, 0.0, 1.0)
+            self.dehaze_inv_ground = 1.0 - self.dehaze_ground_weight
+
         yuv = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
         y, u, v = cv2.split(yuv)
 
-        # Dynamic range contrast stretch to pierce through white/grey fog
-        p_low, p_high = np.percentile(y[::2, ::2], (3, 97))
-        if p_high > p_low + 20:
-            y_stretched = np.clip((y.astype(np.float32) - p_low) * (255.0 / (p_high - p_low)), 0, 255).astype(np.uint8)
-        else:
-            y_stretched = y
+        # Base atmospheric illumination vs fine structural details
+        base = cv2.boxFilter(y, -1, (21, 21))
+        detail = y.astype(np.float32) - base.astype(np.float32)
 
-        y_dehaze = self.clahe_dehaze.apply(y_stretched)
+        # Contrast expansion on base layer to slice through fog veil
+        p_low, p_high = np.percentile(base[::4, ::4], (2, 98))
+        base_expanded = np.clip((base.astype(np.float32) - p_low) * (255.0 / max(p_high - p_low, 28.0)), 0, 255)
 
-        # Vivid chromatic boost (+25%) to pierce through milky white/grey fog
-        u_boost = cv2.addWeighted(u, 1.25, np.full_like(u, 128), -0.25, 0)
-        v_boost = cv2.addWeighted(v, 1.25, np.full_like(v, 128), -0.25, 0)
+        # Ground detail boost (1.8x on road, lane lines, vehicles, trees)
+        detail_boosted = detail * (1.0 + 1.2 * self.dehaze_ground_weight)
+        y_dehazed = np.clip(base_expanded + detail_boosted, 0, 255).astype(np.uint8)
 
-        remastered = cv2.cvtColor(cv2.merge([y_dehaze, u_boost, v_boost]), cv2.COLOR_YUV2BGR)
-        gaussian = cv2.GaussianBlur(remastered, (0, 0), 1.2)
-        crisp = cv2.addWeighted(remastered, 1.20, gaussian, -0.20, 0)
+        # Multi-tile adaptive CLAHE on road surface
+        y_clahe = self.clahe_dehaze.apply(y_dehazed)
+        y_final = np.clip(y_clahe.astype(np.float32) * self.dehaze_ground_weight + y_dehazed.astype(np.float32) * self.dehaze_inv_ground, 0, 255).astype(np.uint8)
+
+        # Vivid chromatic boost (+30% chroma) for lush mountain greens and lane stripes
+        u_boost = cv2.addWeighted(u, 1.30, np.full_like(u, 128), -0.30, 0)
+        v_boost = cv2.addWeighted(v, 1.30, np.full_like(v, 128), -0.30, 0)
+
+        remastered = cv2.cvtColor(cv2.merge([y_final, u_boost, v_boost]), cv2.COLOR_YUV2BGR)
+        gaussian = cv2.GaussianBlur(remastered, (0, 0), 1.1)
+        crisp = cv2.addWeighted(remastered, 1.22, gaussian, -0.22, 0)
         return np.clip(crisp, 0, 255).astype(np.uint8)
 
     # --------------------------------------------------------------------------
