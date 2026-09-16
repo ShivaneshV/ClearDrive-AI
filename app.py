@@ -1179,8 +1179,18 @@ def update_settings():
         # 1. Independent Feature Toggle (e.g. toggle_feature: 'fog')
         if 'toggle_feature' in data and data['toggle_feature']:
             feat = str(data['toggle_feature']).lower().strip()
+            visual_modes = ['fog', 'night', 'lidar', 'thermal', 'glare']
             if feat == 'raw':
                 current_features['raw'] = not current_features.get('raw', False)
+                if current_features['raw']:
+                    for vm in visual_modes:
+                        current_features[vm] = False
+            elif feat in visual_modes:
+                was_active = current_features.get(feat, False)
+                for vm in visual_modes:
+                    current_features[vm] = False
+                current_features[feat] = not was_active
+                current_features['raw'] = False
             elif feat in current_features:
                 current_features[feat] = not current_features[feat]
                 if current_features[feat]:
@@ -1198,6 +1208,7 @@ def update_settings():
         if 'mode' in data and data['mode'] is not None:
             m = str(data['mode']).lower().strip()
             current_mode = m
+            visual_modes = ['fog', 'night', 'lidar', 'thermal', 'glare']
             if m == 'auto':
                 current_features = {
                     'fog': False, 'night': False, 'lidar': False, 'thermal': False,
@@ -1206,8 +1217,18 @@ def update_settings():
                 force_traction_demo = False
             elif m == 'raw':
                 current_features['raw'] = not current_features.get('raw', False)
+                if current_features['raw']:
+                    for vm in visual_modes:
+                        current_features[vm] = False
+            elif m in visual_modes:
+                was_active = current_features.get(m, False)
+                for vm in visual_modes:
+                    current_features[vm] = False
+                current_features[m] = not was_active
+                current_features['raw'] = False
+                if m in ['hydro', 'ice']:
+                    force_traction_demo = True
             elif m in current_features:
-                # Toggle that individual feature
                 current_features[m] = not current_features[m]
                 if current_features[m]:
                     current_features['raw'] = False

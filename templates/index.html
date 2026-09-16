@@ -2405,9 +2405,19 @@
         function toggleFeature(featName) {
             playChime();
 
+            const visualModes = ['fog', 'night', 'lidar', 'thermal', 'glare'];
+
             // Optimistic UI state flip
             if (featName === 'raw') {
                 activeFeatures.raw = !activeFeatures.raw;
+                if (activeFeatures.raw) {
+                    visualModes.forEach(vm => activeFeatures[vm] = false);
+                }
+            } else if (visualModes.includes(featName)) {
+                const wasActive = activeFeatures[featName];
+                visualModes.forEach(vm => activeFeatures[vm] = false);
+                activeFeatures[featName] = !wasActive;
+                activeFeatures.raw = false;
             } else {
                 activeFeatures[featName] = !activeFeatures[featName];
                 if (activeFeatures[featName]) {
@@ -3339,23 +3349,29 @@
             }
         }
 
-        // Tap video feed to instantly resync lag; Double-tap to toggle fullscreen
+        // Double-tap or double-click to toggle fullscreen with zero stream stutter
         let lastVideoTapTime = 0;
-        let tapTimeout = null;
         function handleVideoTap(e) {
             const now = Date.now();
             if (now - lastVideoTapTime < 350) {
-                if (tapTimeout) clearTimeout(tapTimeout);
                 toggleFullscreen();
                 lastVideoTapTime = 0;
             } else {
                 lastVideoTapTime = now;
-                if (tapTimeout) clearTimeout(tapTimeout);
-                tapTimeout = setTimeout(() => {
-                    resyncStream();
-                }, 360);
             }
         }
+
+        // Automatic stream watchdog (reconnects smoothly on network drop)
+        window.addEventListener('DOMContentLoaded', () => {
+            const vStream = document.getElementById('videoStream');
+            if (vStream) {
+                vStream.addEventListener('error', () => {
+                    setTimeout(() => {
+                        if (vStream) vStream.src = '/video_feed?t=' + Date.now();
+                    }, 400);
+                });
+            }
+        });
 
         // ------------------ COCKPIT VIEWPORT LAYOUT SWITCHER ------------------
         function setLayoutMode(mode) {
