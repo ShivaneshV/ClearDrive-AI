@@ -2411,13 +2411,26 @@
             if (featName === 'raw') {
                 activeFeatures.raw = !activeFeatures.raw;
                 if (activeFeatures.raw) {
-                    visualModes.forEach(vm => activeFeatures[vm] = false);
+                    ['fog', 'night', 'lidar', 'thermal', 'glare'].forEach(f => activeFeatures[f] = false);
                 }
-            } else if (visualModes.includes(featName)) {
-                const wasActive = activeFeatures[featName];
-                visualModes.forEach(vm => activeFeatures[vm] = false);
-                activeFeatures[featName] = !wasActive;
-                activeFeatures.raw = false;
+            } else if (['fog', 'night', 'glare'].includes(featName)) {
+                // Fog/Rain, Night Vision, and Anti-Glare can ALL open together simultaneously!
+                activeFeatures[featName] = !activeFeatures[featName];
+                if (activeFeatures[featName]) {
+                    activeFeatures.raw = false;
+                }
+            } else if (featName === 'thermal') {
+                activeFeatures.thermal = !activeFeatures.thermal;
+                if (activeFeatures.thermal) {
+                    activeFeatures.lidar = false;
+                    activeFeatures.raw = false;
+                }
+            } else if (featName === 'lidar') {
+                activeFeatures.lidar = !activeFeatures.lidar;
+                if (activeFeatures.lidar) {
+                    activeFeatures.thermal = false;
+                    activeFeatures.raw = false;
+                }
             } else {
                 activeFeatures[featName] = !activeFeatures[featName];
                 if (activeFeatures[featName]) {

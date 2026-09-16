@@ -1073,43 +1073,50 @@ class OmniVisionEngine:
         is_fog_scene = ('fog' in vid_lower) or (dc_mean > 85.0 and avg_brightness > 75.0)
 
         # Select Primary Visual Remastering / Optics Profile
+        enhanced = frame.copy()
         if feat_thermal:
-            enhanced = self.render_thermal_optics(frame, targets=self.cached_targets)
+            enhanced = self.render_thermal_optics(enhanced, targets=self.cached_targets)
             active_enhancements.append("FLIR THERMAL OPTICS")
         elif feat_lidar:
-            enhanced = self.render_cyber_lidar(frame, corridor_poly)
+            enhanced = self.render_cyber_lidar(enhanced, corridor_poly)
             active_enhancements.append("CYBER-LIDAR 64-BEAM")
-        elif feat_night:
-            enhanced = self.enhance_night_vision(frame, min(avg_brightness, 35.0))
-            active_enhancements.append("AI STARLIGHT HDR VISION")
-        elif feat_fog:
-            enhanced = self.dehaze_atmosphere(frame)
-            active_enhancements.append("TRUE-COLOR DEHAZER")
-        elif feat_glare:
-            enhanced = self.suppress_glare(frame, force_polarizer=True)
-            active_enhancements.append("ACTIVE GLARE POLARIZER")
-        elif mode == 'auto':
-            if is_night_scene:
-                enhanced = self.enhance_night_vision(frame, min(avg_brightness, 35.0))
-                active_enhancements.append("AI STARLIGHT HDR VISION")
-            elif is_fog_scene:
-                enhanced = self.dehaze_atmosphere(frame)
-                active_enhancements.append("TRUE-COLOR DEHAZER")
-            else:
-                enhanced = self.enhance_visual_clarity(frame)
-                active_enhancements.append("4K HDR CLARITY REMASTER")
         else:
-            enhanced = self.enhance_visual_clarity(frame)
-            active_enhancements.append("4K HDR CLARITY REMASTER")
+            applied_optics = False
+            # 1. Night Vision Layer (Can be active simultaneously with Fog & Anti-Glare!)
+            if feat_night:
+                enhanced = self.enhance_night_vision(enhanced, min(avg_brightness, 35.0))
+                active_enhancements.append("AI STARLIGHT HDR VISION")
+                applied_optics = True
 
-        # Step D: Active Anti-Glare Polarizer (if selected concurrently or high glare detected)
-        if feat_glare and "ACTIVE GLARE POLARIZER" not in active_enhancements:
-            enhanced = self.suppress_glare(enhanced, force_polarizer=True)
-            active_enhancements.append("ACTIVE GLARE POLARIZER")
-        elif mode == 'auto' and not feat_thermal and not feat_lidar and ('glare' in vid_lower or (is_night_scene and avg_brightness > 18.0)):
-            if "ACTIVE GLARE POLARIZER" not in active_enhancements:
-                enhanced = self.suppress_glare(enhanced)
+            # 2. Fog / Rain Dehazer Layer (Can run simultaneously with Night Vision & Anti-Glare!)
+            if feat_fog:
+                enhanced = self.dehaze_atmosphere(enhanced)
+                active_enhancements.append("TRUE-COLOR DEHAZER")
+                applied_optics = True
+
+            # 3. Active Anti-Glare Polarizer Layer (Can run simultaneously with Night Vision & Fog!)
+            if feat_glare:
+                enhanced = self.suppress_glare(enhanced, force_polarizer=True)
                 active_enhancements.append("ACTIVE GLARE POLARIZER")
+                applied_optics = True
+
+            if not applied_optics:
+                if mode == 'auto':
+                    if is_night_scene:
+                        enhanced = self.enhance_night_vision(enhanced, min(avg_brightness, 35.0))
+                        active_enhancements.append("AI STARLIGHT HDR VISION")
+                    elif is_fog_scene:
+                        enhanced = self.dehaze_atmosphere(enhanced)
+                        active_enhancements.append("TRUE-COLOR DEHAZER")
+                    else:
+                        enhanced = self.enhance_visual_clarity(enhanced)
+                        active_enhancements.append("4K HDR CLARITY REMASTER")
+                    if ('glare' in vid_lower or (is_night_scene and avg_brightness > 18.0)):
+                        enhanced = self.suppress_glare(enhanced)
+                        active_enhancements.append("ACTIVE GLARE POLARIZER")
+                else:
+                    enhanced = self.enhance_visual_clarity(enhanced)
+                    active_enhancements.append("4K HDR CLARITY REMASTER")
 
         # Step G: AR Lane Guidance (Laser boundary rails, distance hashes, and real-time lane tracking)
         lane_state, lane_dir, lane_arrow = self.detect_lane_position(enhanced, corridor_poly)

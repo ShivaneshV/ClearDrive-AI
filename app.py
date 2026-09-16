@@ -1177,20 +1177,29 @@ def update_settings():
             camera_flip_h = not camera_flip_h
 
         # 1. Independent Feature Toggle (e.g. toggle_feature: 'fog')
+        # 1. Independent Feature Toggle (e.g. toggle_feature: 'fog')
         if 'toggle_feature' in data and data['toggle_feature']:
             feat = str(data['toggle_feature']).lower().strip()
-            visual_modes = ['fog', 'night', 'lidar', 'thermal', 'glare']
             if feat == 'raw':
                 current_features['raw'] = not current_features.get('raw', False)
                 if current_features['raw']:
-                    for vm in visual_modes:
-                        current_features[vm] = False
-            elif feat in visual_modes:
-                was_active = current_features.get(feat, False)
-                for vm in visual_modes:
-                    current_features[vm] = False
-                current_features[feat] = not was_active
-                current_features['raw'] = False
+                    for k in ['fog', 'night', 'lidar', 'thermal', 'glare']:
+                        current_features[k] = False
+            elif feat in ['fog', 'night', 'glare']:
+                # Fog, Night Vision, and Anti-Glare can ALL open at the same time!
+                current_features[feat] = not current_features.get(feat, False)
+                if current_features[feat]:
+                    current_features['raw'] = False
+            elif feat == 'thermal':
+                current_features['thermal'] = not current_features.get('thermal', False)
+                if current_features['thermal']:
+                    current_features['lidar'] = False
+                    current_features['raw'] = False
+            elif feat == 'lidar':
+                current_features['lidar'] = not current_features.get('lidar', False)
+                if current_features['lidar']:
+                    current_features['thermal'] = False
+                    current_features['raw'] = False
             elif feat in current_features:
                 current_features[feat] = not current_features[feat]
                 if current_features[feat]:
@@ -1208,7 +1217,6 @@ def update_settings():
         if 'mode' in data and data['mode'] is not None:
             m = str(data['mode']).lower().strip()
             current_mode = m
-            visual_modes = ['fog', 'night', 'lidar', 'thermal', 'glare']
             if m == 'auto':
                 current_features = {
                     'fog': False, 'night': False, 'lidar': False, 'thermal': False,
@@ -1218,16 +1226,22 @@ def update_settings():
             elif m == 'raw':
                 current_features['raw'] = not current_features.get('raw', False)
                 if current_features['raw']:
-                    for vm in visual_modes:
-                        current_features[vm] = False
-            elif m in visual_modes:
-                was_active = current_features.get(m, False)
-                for vm in visual_modes:
-                    current_features[vm] = False
-                current_features[m] = not was_active
-                current_features['raw'] = False
-                if m in ['hydro', 'ice']:
-                    force_traction_demo = True
+                    for k in ['fog', 'night', 'lidar', 'thermal', 'glare']:
+                        current_features[k] = False
+            elif m in ['fog', 'night', 'glare']:
+                current_features[m] = not current_features.get(m, False)
+                if current_features[m]:
+                    current_features['raw'] = False
+            elif m == 'thermal':
+                current_features['thermal'] = not current_features.get('thermal', False)
+                if current_features['thermal']:
+                    current_features['lidar'] = False
+                    current_features['raw'] = False
+            elif m == 'lidar':
+                current_features['lidar'] = not current_features.get('lidar', False)
+                if current_features['lidar']:
+                    current_features['thermal'] = False
+                    current_features['raw'] = False
             elif m in current_features:
                 current_features[m] = not current_features[m]
                 if current_features[m]:
