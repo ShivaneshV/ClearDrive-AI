@@ -106,6 +106,7 @@ class OmniVisionEngine:
 
         # Threaded Asynchronous YOLO Object Detector for zero-lag 30+ FPS video
         self.yolo_lock = threading.Lock()
+        self.reset_epoch = 0
         self.yolo_pending_frame = None
         self.yolo_pending_poly = None
         self.yolo_running = True
@@ -119,10 +120,12 @@ class OmniVisionEngine:
         while self.yolo_running:
             frame_to_process = None
             poly = None
+            task_epoch = 0
             with self.yolo_lock:
                 if self.yolo_pending_frame is not None:
                     frame_to_process = self.yolo_pending_frame
                     poly = self.yolo_pending_poly
+                    task_epoch = self.reset_epoch
                     self.yolo_pending_frame = None
                     self.yolo_pending_poly = None
 
@@ -134,7 +137,7 @@ class OmniVisionEngine:
                 results = self.model(
                     frame_to_process,
                     classes=self.target_classes,
-                    conf=0.25,
+                    conf=0.35,
                     verbose=False,
                     imgsz=224,
                     device='cpu'
@@ -234,8 +237,9 @@ class OmniVisionEngine:
                     })
 
                 with self.yolo_lock:
-                    self.cached_targets = targets
-                    self.cached_closest_dist = targets[0]['dist'] if targets else None
+                    if task_epoch == self.reset_epoch:
+                        self.cached_targets = targets
+                        self.cached_closest_dist = targets[0]['dist'] if targets else None
             except Exception:
                 pass
 
@@ -247,8 +251,10 @@ class OmniVisionEngine:
         self.smooth_dy = 0.0
         self.smoothed_target_boxes.clear()
         with self.yolo_lock:
+            self.reset_epoch += 1
             self.cached_targets.clear()
             self.yolo_pending_frame = None
+            self.yolo_pending_poly = None
         self.cached_emergency_brake = False
         self.cached_min_ttc = 0.0
         self.cached_closest_dist = None
@@ -372,15 +378,22 @@ class OmniVisionEngine:
         yuv = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
         y, u, v = cv2.split(yuv)
 
-        y_dehaze = self.clahe_dehaze.apply(y)
+        # Dynamic range contrast stretch to pierce through white/grey fog
+        p_low, p_high = np.percentile(y[::2, ::2], (3, 97))
+        if p_high > p_low + 20:
+            y_stretched = np.clip((y.astype(np.float32) - p_low) * (255.0 / (p_high - p_low)), 0, 255).astype(np.uint8)
+        else:
+            y_stretched = y
 
-        # Vivid chromatic boost to pierce through milky white/grey fog
-        u_boost = cv2.addWeighted(u, 1.15, np.full_like(u, 128), -0.15, 0)
-        v_boost = cv2.addWeighted(v, 1.15, np.full_like(v, 128), -0.15, 0)
+        y_dehaze = self.clahe_dehaze.apply(y_stretched)
+
+        # Vivid chromatic boost (+25%) to pierce through milky white/grey fog
+        u_boost = cv2.addWeighted(u, 1.25, np.full_like(u, 128), -0.25, 0)
+        v_boost = cv2.addWeighted(v, 1.25, np.full_like(v, 128), -0.25, 0)
 
         remastered = cv2.cvtColor(cv2.merge([y_dehaze, u_boost, v_boost]), cv2.COLOR_YUV2BGR)
-        gaussian = cv2.GaussianBlur(remastered, (0, 0), 1.1)
-        crisp = cv2.addWeighted(remastered, 1.15, gaussian, -0.15, 0)
+        gaussian = cv2.GaussianBlur(remastered, (0, 0), 1.2)
+        crisp = cv2.addWeighted(remastered, 1.20, gaussian, -0.20, 0)
         return np.clip(crisp, 0, 255).astype(np.uint8)
 
     # --------------------------------------------------------------------------
@@ -420,15 +433,18 @@ class OmniVisionEngine:
     # --------------------------------------------------------------------------
     # 4. TRUE AUTOMOTIVE POLARIZED ANTI-GLARE SHIELD
     # --------------------------------------------------------------------------
-    def suppress_glare(self, frame):
+    def suppress_glare(self, frame, force_polarizer=False):
         """
         Automotive Active Anti-Glare Polarizer (< 2ms):
         - Compresses blinding specular high-beam highlights (> 215) smoothly
         - Eliminates headlight flare bloom while keeping peripheral road and lanes crystal clear
+        - When activated, applies polarized anti-reflective contrast filter
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         glare_core = cv2.threshold(gray, 215, 255, cv2.THRESH_BINARY)[1]
-        if np.count_nonzero(glare_core) < 20:
+        has_glare = np.count_nonzero(glare_core) >= 20
+
+        if not has_glare and not force_polarizer:
             return frame
 
         flare = cv2.GaussianBlur(glare_core, (21, 21), 0).astype(np.float32) / 255.0
@@ -439,14 +455,18 @@ class OmniVisionEngine:
         # Specular compression table: smooth knee rolloff
         table = np.zeros(256, dtype=np.uint8)
         for i in range(256):
-            table[i] = i if i < 190 else int(190 + (i - 190) * 0.45)
+            table[i] = i if i < 185 else int(185 + (i - 185) * 0.40)
         y_compressed = cv2.LUT(y, table)
 
         # Dampen glare flare bloom
-        f_weight = np.clip(flare * 0.75, 0.0, 1.0)
-        y_damped = (y_compressed.astype(np.float32) * (1.0 - f_weight * 0.30)).astype(np.uint8)
+        f_weight = np.clip(flare * 0.85, 0.0, 1.0)
+        y_damped = (y_compressed.astype(np.float32) * (1.0 - f_weight * 0.35)).astype(np.uint8)
 
-        anti_bgr = cv2.cvtColor(cv2.merge([y_damped, u, v]), cv2.COLOR_YUV2BGR)
+        # Polarized chromatic contrast: richer road tones
+        u_rich = cv2.addWeighted(u, 1.10, np.full_like(u, 128), -0.10, 0)
+        v_rich = cv2.addWeighted(v, 1.10, np.full_like(v, 128), -0.10, 0)
+
+        anti_bgr = cv2.cvtColor(cv2.merge([y_damped, u_rich, v_rich]), cv2.COLOR_YUV2BGR)
         return anti_bgr
 
     # --------------------------------------------------------------------------
@@ -512,10 +532,10 @@ class OmniVisionEngine:
                 cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
                 cv2.drawMarker(thermal, (cx, cy), box_color, cv2.MARKER_CROSS, 14, 1)
 
-                temp_str = "FLIR: 36.8°C (HUMAN)" if is_vru else f"FLIR: 84.2°C (DIST {t['dist']}m)"
+                temp_str = "FLIR: 36.8 C (HUMAN)" if is_vru else f"FLIR: 84.2 C (DIST {t['dist']}m)"
                 cv2.rectangle(thermal, (x1, max(y1 - 20, 4)), (x1 + 175, max(y1, 24)), (15, 0, 30), -1)
                 cv2.putText(thermal, temp_str, (x1 + 4, max(y1 - 6, 18)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.38, box_color, 1, cv2.LINE_AA)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.38, box_color, 1, cv2.LINE_8)
 
         # Thermal HUD Stamp
         cv2.rectangle(thermal, (15, 12), (320, 36), (20, 5, 30), -1)
@@ -1033,51 +1053,59 @@ class OmniVisionEngine:
         is_night_scene = (avg_brightness < 45.0) or ('night' in vid_lower) or ('glare' in vid_lower)
         is_fog_scene = ('fog' in vid_lower) or (dc_mean > 85.0 and avg_brightness > 75.0)
 
-        if feat_night or (mode == 'auto' and is_night_scene):
+        # Select Primary Visual Remastering / Optics Profile
+        if feat_thermal:
+            enhanced = self.render_thermal_optics(frame, targets=self.cached_targets)
+            active_enhancements.append("FLIR THERMAL OPTICS")
+        elif feat_lidar:
+            enhanced = self.render_cyber_lidar(frame, corridor_poly)
+            active_enhancements.append("CYBER-LIDAR 64-BEAM")
+        elif feat_night:
             enhanced = self.enhance_night_vision(frame, min(avg_brightness, 35.0))
             active_enhancements.append("AI STARLIGHT HDR VISION")
-        elif feat_fog or (mode == 'auto' and is_fog_scene):
+        elif feat_fog:
             enhanced = self.dehaze_atmosphere(frame)
             active_enhancements.append("TRUE-COLOR DEHAZER")
+        elif feat_glare:
+            enhanced = self.suppress_glare(frame, force_polarizer=True)
+            active_enhancements.append("ACTIVE GLARE POLARIZER")
+        elif mode == 'auto':
+            if is_night_scene:
+                enhanced = self.enhance_night_vision(frame, min(avg_brightness, 35.0))
+                active_enhancements.append("AI STARLIGHT HDR VISION")
+            elif is_fog_scene:
+                enhanced = self.dehaze_atmosphere(frame)
+                active_enhancements.append("TRUE-COLOR DEHAZER")
+            else:
+                enhanced = self.enhance_visual_clarity(frame)
+                active_enhancements.append("4K HDR CLARITY REMASTER")
         else:
             enhanced = self.enhance_visual_clarity(frame)
             active_enhancements.append("4K HDR CLARITY REMASTER")
 
-        # Step D: Active Anti-Glare Polarizer (compresses specular high-beam flare)
-        if feat_glare or (mode == 'auto' and ('glare' in vid_lower or (is_night_scene and avg_brightness > 18.0))):
-            enhanced = self.suppress_glare(enhanced)
+        # Step D: Active Anti-Glare Polarizer (if selected concurrently or high glare detected)
+        if feat_glare and "ACTIVE GLARE POLARIZER" not in active_enhancements:
+            enhanced = self.suppress_glare(enhanced, force_polarizer=True)
             active_enhancements.append("ACTIVE GLARE POLARIZER")
-
-        # Step E: Thermal Optics False-Color Heatmap
-        if feat_thermal:
-            enhanced = self.render_thermal_optics(enhanced, targets=[])
-            active_enhancements.append("FLIR THERMAL OPTICS")
-
-        # Step F: Cyber-LIDAR 64-Beam Point Cloud
-        if feat_lidar:
-            enhanced = self.render_cyber_lidar(enhanced, corridor_poly)
-            active_enhancements.append("CYBER-LIDAR 64-BEAM")
+        elif mode == 'auto' and not feat_thermal and not feat_lidar and ('glare' in vid_lower or (is_night_scene and avg_brightness > 18.0)):
+            if "ACTIVE GLARE POLARIZER" not in active_enhancements:
+                enhanced = self.suppress_glare(enhanced)
+                active_enhancements.append("ACTIVE GLARE POLARIZER")
 
         # Step G: AR Lane Guidance (Laser boundary rails, distance hashes, and real-time lane tracking)
-        is_cabin_camera = any(k in vid_lower for k in ['laptop', 'cam0', 'cabin', 'selfie', 'front'])
         lane_state, lane_dir, lane_arrow = self.detect_lane_position(enhanced, corridor_poly)
         if feat_lanes:
-            if not is_cabin_camera:
-                enhanced = self.draw_ar_lane_guidance(
-                    enhanced, corridor_poly,
-                    is_traction_hazard=is_traction_hazard,
-                    lane_state=lane_state,
-                    lane_dir=lane_dir,
-                    lane_arrow=lane_arrow
-                )
-                active_enhancements.append(f"LANE: {lane_state} {lane_arrow}")
-            else:
-                lane_state = "CABIN VIEW"
-                lane_arrow = "●"
-                active_enhancements.append("CABIN: DRIVER ACTIVE")
+            enhanced = self.draw_ar_lane_guidance(
+                enhanced, corridor_poly,
+                is_traction_hazard=is_traction_hazard,
+                lane_state=lane_state,
+                lane_dir=lane_dir,
+                lane_arrow=lane_arrow
+            )
+            active_enhancements.append(f"LANE: {lane_state} {lane_arrow}")
 
         # Step H: Vehicle Radar, Distance & Ghost-Vision Tracking
-        if feat_radar and not is_cabin_camera:
+        if feat_radar:
             enhanced, _, ttc, targets, closest_d = self.track_targets_and_ghost_vision(
                 enhanced, corridor_poly, force_ghost=True
             )
@@ -1090,16 +1118,15 @@ class OmniVisionEngine:
         # Collision alert suppression: only overspeed alerts are permitted
         brake_alert = False
 
-        # Step I: Road Pothole Scanner (Neon green, 3D asphalt isolated)
-        scan_potholes = feat_potholes and not is_cabin_camera
-        if mode == 'auto' and not is_cabin_camera:
-            scan_potholes = (avg_brightness >= 40.0) or ('pothole' in vid_lower)
-        if scan_potholes:
+        # Step I: Road Pothole Scanner (Neon green, strictly obeys feat_potholes toggle)
+        if feat_potholes:
             t_boxes = [t['box'] for t in targets]
             enhanced, pothole_count = self.detect_potholes(enhanced, corridor_poly, exclude_boxes=t_boxes)
             if pothole_count > 0:
                 active_enhancements.append(f"POTHOLES: {pothole_count}")
         else:
+            self.cached_pothole_boxes = []
+            self.cached_pothole_count = 0
             pothole_count = 0
 
         # Step J: V2V AR Holographic Sky Billboard (Only drawn if explicitly provided, no automatic intrusion)
@@ -1127,17 +1154,17 @@ class OmniVisionEngine:
             # Left Badge: RAW SENSOR (UNPROCESSED)
             cv2.rectangle(dashboard, (15, h - 30), (175, h - 8), (10, 14, 20), -1)
             cv2.rectangle(dashboard, (15, h - 30), (175, h - 8), (140, 150, 165), 1)
-            cv2.putText(dashboard, "◀ RAW SENSOR", (22, h - 13),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.40, (210, 220, 230), 1, cv2.LINE_AA)
+            cv2.putText(dashboard, "<< RAW SENSOR", (22, h - 13),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.40, (210, 220, 230), 1, cv2.LINE_8)
 
-            # Right Badge: ⚡ AI OMNI-VISION (HDR)
-            right_label = "⚡ AI OMNI-VISION (HDR) ▶"
-            badge_w = 185
+            # Right Badge: >> AI OMNI-VISION (HDR) >>
+            right_label = ">> AI OMNI-VISION (HDR) >>"
+            badge_w = 205
             rx1 = w - badge_w - 15
             cv2.rectangle(dashboard, (rx1, h - 30), (w - 15, h - 8), (10, 14, 20), -1)
             cv2.rectangle(dashboard, (rx1, h - 30), (w - 15, h - 8), (0, 255, 100), 1)
             cv2.putText(dashboard, right_label, (rx1 + 8, h - 13),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.40, (0, 255, 100), 1, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.40, (0, 255, 100), 1, cv2.LINE_8)
         else:
             dashboard = final_output
 

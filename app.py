@@ -807,20 +807,20 @@ def process_video():
 
         if src in ['phone', 'mobile']:
             display_clip = "📱 LIVE MOBILE DASH CAM"
-            tele["enhancements"] = ["📱 MOBILE DASH CAM ACTIVE", "WIRELESS HD WINDSHIELD NODE"]
+            tele["enhancements"] = ["📱 MOBILE DASH CAM ACTIVE"] + [e for e in tele.get("enhancements", []) if "MOBILE" not in e]
         elif src in ['car', 'cam1', '1']:
             if is_standby_guide:
                 display_clip = "⚠️ PLEASE CONNECT USB CABLE"
                 tele["enhancements"] = ["🚗 CAR DASH CAM", "⚠️ PLEASE CONNECT USB CABLE"]
             elif (car_frame_buffer is not None) and ((now - car_last_seen) < 3.0):
                 display_clip = "🚗 LIVE CAR DASH CAM (ANDROID TV/USB)"
-                tele["enhancements"] = ["🚗 CAR DASH CAM ACTIVE", "ANDROID TV / USB CAMERA"]
+                tele["enhancements"] = ["🚗 CAR DASH CAM (LIVE)"] + [e for e in tele.get("enhancements", []) if "CAR" not in e]
             else:
                 display_clip = f"🚗 LIVE CAR DASH CAM ({external_usb_cam_name or 'USB'})"
-                tele["enhancements"] = ["🚗 CAR DASH CAM ACTIVE", f"HARDWARE USB ({external_usb_cam_name or 'UVC'})"]
+                tele["enhancements"] = [f"🚗 CAR DASH CAM ({external_usb_cam_name or 'USB'})"] + [e for e in tele.get("enhancements", []) if "CAR" not in e]
         elif src in ['laptop', 'cam0', '0']:
             display_clip = "💻 LIVE LAPTOP DASH CAM"
-            tele["enhancements"] = ["💻 LAPTOP DASH CAM ACTIVE", "CABIN CAM // DRIVER ALERT"]
+            tele["enhancements"] = ["💻 LAPTOP DASH CAM (LIVE)"] + [e for e in tele.get("enhancements", []) if "LAPTOP" not in e]
         elif src in PLAYLIST or str(src).endswith('.mp4'):
             display_clip = f"🎥 SELECTED CLIP: {src}"
         else:
