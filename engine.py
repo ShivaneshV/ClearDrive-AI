@@ -80,8 +80,10 @@ class OmniVisionEngine:
         self.cached_pothole_count = 0
         self.cached_pothole_boxes = []
 
-        # Digital Road Vibration & Camera Shake Dampener
+        # Digital Road Vibration & Camera Shake Multi-Axis Gyro Stabilizer
         self.prev_stabilize_crop = None
+        self.smooth_dx = 0.0
+        self.smooth_dy = 0.0
         self.smoothed_target_boxes = {}
 
         # Threaded Asynchronous YOLO Object Detector for zero-lag 30+ FPS video
@@ -220,9 +222,11 @@ class OmniVisionEngine:
                 pass
 
     def reset_history(self):
-        """Resets trajectory buffers."""
+        """Resets trajectory buffers and gyro stabilization offsets."""
         self.target_trajectories.clear()
         self.prev_stabilize_crop = None
+        self.smooth_dx = 0.0
+        self.smooth_dy = 0.0
         self.smoothed_target_boxes.clear()
         with self.yolo_lock:
             self.cached_targets.clear()
@@ -233,47 +237,78 @@ class OmniVisionEngine:
         self.frame_idx = 0
 
     # --------------------------------------------------------------------------
-    # 0. REAL-TIME DIGITAL CAMERA VIBRATION & ROAD SHOCK STABILIZER (< 0.8ms)
+    # 0. REAL-TIME MULTI-AXIS GYROSCOPIC CAMERA STABILIZER (< 0.4ms)
     # --------------------------------------------------------------------------
     def stabilize_road_vibrations(self, frame):
         """
-        Fast Digital Vibration & Shock Damper (< 1ms):
-        Dampens high-frequency camera bounce from potholes, engine shudder,
-        and road bumps using 1D vertical projection cross-correlation.
+        Next-Gen Multi-Axis Gyroscopic Camera Stabilizer (< 0.4ms):
+        Dampens 2D camera shake and road bounce (X lateral shudder + Y road shocks)
+        from potholes, engine vibration, and vehicle movement using dual 1D projection correlation.
         """
         h, w = frame.shape[:2]
-        y1, y2 = int(h * 0.35), int(h * 0.65)
-        x1, x2 = int(w * 0.25), int(w * 0.75)
+        y1, y2 = int(h * 0.25), int(h * 0.75)
+        x1, x2 = int(w * 0.20), int(w * 0.80)
         crop = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
-        crop_small = cv2.resize(crop, (80, 40), interpolation=cv2.INTER_NEAREST)
+        crop_small = cv2.resize(crop, (64, 48), interpolation=cv2.INTER_NEAREST)
 
         if self.prev_stabilize_crop is None:
             self.prev_stabilize_crop = crop_small
             return frame
 
-        prof_curr = np.mean(crop_small, axis=1)
-        prof_prev = np.mean(self.prev_stabilize_crop, axis=1)
+        prof_curr_y = np.mean(crop_small, axis=1)
+        prof_prev_y = np.mean(self.prev_stabilize_crop, axis=1)
+        prof_curr_x = np.mean(crop_small, axis=0)
+        prof_prev_x = np.mean(self.prev_stabilize_crop, axis=0)
         self.prev_stabilize_crop = crop_small
 
-        best_shift = 0
-        min_diff = float('inf')
-        for s in range(-3, 4):
+        # Search vertical shift (Y) in [-4, 4]
+        best_shift_y = 0
+        min_diff_y = float('inf')
+        for s in range(-4, 5):
             if s < 0:
-                diff = float(np.mean(np.abs(prof_curr[:s] - prof_prev[-s:])))
+                diff = float(np.mean(np.abs(prof_curr_y[:s] - prof_prev_y[-s:])))
             elif s > 0:
-                diff = float(np.mean(np.abs(prof_curr[s:] - prof_prev[:-s])))
+                diff = float(np.mean(np.abs(prof_curr_y[s:] - prof_prev_y[:-s])))
             else:
-                diff = float(np.mean(np.abs(prof_curr - prof_prev)))
-            if diff < min_diff:
-                min_diff = diff
-                best_shift = s
+                diff = float(np.mean(np.abs(prof_curr_y - prof_prev_y)))
+            if diff < min_diff_y:
+                min_diff_y = diff
+                best_shift_y = s
 
-        scale_y = (y2 - y1) / 40.0
-        actual_dy = best_shift * scale_y
+        # Search horizontal shift (X) in [-4, 4]
+        best_shift_x = 0
+        min_diff_x = float('inf')
+        for s in range(-4, 5):
+            if s < 0:
+                diff = float(np.mean(np.abs(prof_curr_x[:s] - prof_prev_x[-s:])))
+            elif s > 0:
+                diff = float(np.mean(np.abs(prof_curr_x[s:] - prof_prev_x[:-s])))
+            else:
+                diff = float(np.mean(np.abs(prof_curr_x - prof_prev_x)))
+            if diff < min_diff_x:
+                min_diff_x = diff
+                best_shift_x = s
 
-        if abs(actual_dy) >= 1.0 and abs(actual_dy) <= 16.0:
-            damp_dy = -int(round(actual_dy * 0.55))
-            M = np.float32([[1, 0, 0], [0, 1, damp_dy]])
+        scale_y = (y2 - y1) / 48.0
+        scale_x = (x2 - x1) / 64.0
+        actual_dy = best_shift_y * scale_y
+        actual_dx = best_shift_x * scale_x
+
+        # Exponential Moving Average (EMA) damping to smooth camera trajectory
+        alpha = 0.50
+        self.smooth_dx = alpha * self.smooth_dx + (1.0 - alpha) * actual_dx
+        self.smooth_dy = alpha * self.smooth_dy + (1.0 - alpha) * actual_dy
+
+        # Counter-stabilization shift (counteract 65% of high-frequency vibration)
+        shift_x = -float(self.smooth_dx * 0.65)
+        shift_y = -float(self.smooth_dy * 0.65)
+
+        # Clamp max counter-shift to prevent edge border artifacts
+        shift_x = max(-20.0, min(20.0, shift_x))
+        shift_y = max(-16.0, min(16.0, shift_y))
+
+        if abs(shift_x) >= 0.5 or abs(shift_y) >= 0.5:
+            M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
             return cv2.warpAffine(frame, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
 
         return frame

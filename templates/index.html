@@ -3062,11 +3062,11 @@
         function transmitLaptopFrames() {
             if (!isLaptopStreaming || !laptopVideoElem) return;
 
-            // High-Definition Capture Canvas: 960x540 Widescreen HD / 1280x720 Laptop HD
+            // High-Definition Real-Time Canvas: 768x432 Mobile (Smooth 30 FPS on 4G) / 960x540 Laptop HD
             const isMobileDevice = (window.innerWidth <= 820) || /iphone|ipad|android/i.test(navigator.userAgent);
-            const hdWidth = isMobileDevice ? 960 : 1280;
-            const hdHeight = isMobileDevice ? 540 : 720;
-            const hdQuality = 0.80;
+            const hdWidth = isMobileDevice ? 768 : 960;
+            const hdHeight = isMobileDevice ? 432 : 540;
+            const hdQuality = isMobileDevice ? 0.62 : 0.70;
 
             if (laptopCanvas) {
                 laptopCanvas.width = hdWidth;
@@ -3110,7 +3110,7 @@
                 }
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 650);
+                const timeoutId = setTimeout(() => controller.abort(), 450);
 
                 try {
                     await fetch(targetEndpoint, {
@@ -4432,7 +4432,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=18').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=19').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
