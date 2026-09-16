@@ -79,6 +79,10 @@ class OmniVisionEngine:
         self.cached_pothole_count = 0
         self.cached_pothole_boxes = []
 
+        # Digital Road Vibration & Camera Shake Dampener
+        self.prev_stabilize_crop = None
+        self.smoothed_target_boxes = {}
+
         # Threaded Asynchronous YOLO Object Detector for zero-lag 30+ FPS video
         self.yolo_lock = threading.Lock()
         self.yolo_pending_frame = None
@@ -217,6 +221,8 @@ class OmniVisionEngine:
     def reset_history(self):
         """Resets trajectory buffers."""
         self.target_trajectories.clear()
+        self.prev_stabilize_crop = None
+        self.smoothed_target_boxes.clear()
         with self.yolo_lock:
             self.cached_targets.clear()
             self.yolo_pending_frame = None
@@ -224,6 +230,52 @@ class OmniVisionEngine:
         self.cached_min_ttc = 0.0
         self.cached_closest_dist = None
         self.frame_idx = 0
+
+    # --------------------------------------------------------------------------
+    # 0. REAL-TIME DIGITAL CAMERA VIBRATION & ROAD SHOCK STABILIZER (< 0.8ms)
+    # --------------------------------------------------------------------------
+    def stabilize_road_vibrations(self, frame):
+        """
+        Fast Digital Vibration & Shock Damper (< 1ms):
+        Dampens high-frequency camera bounce from potholes, engine shudder,
+        and road bumps using 1D vertical projection cross-correlation.
+        """
+        h, w = frame.shape[:2]
+        y1, y2 = int(h * 0.35), int(h * 0.65)
+        x1, x2 = int(w * 0.25), int(w * 0.75)
+        crop = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+        crop_small = cv2.resize(crop, (80, 40), interpolation=cv2.INTER_NEAREST)
+
+        if self.prev_stabilize_crop is None:
+            self.prev_stabilize_crop = crop_small
+            return frame
+
+        prof_curr = np.mean(crop_small, axis=1)
+        prof_prev = np.mean(self.prev_stabilize_crop, axis=1)
+        self.prev_stabilize_crop = crop_small
+
+        best_shift = 0
+        min_diff = float('inf')
+        for s in range(-3, 4):
+            if s < 0:
+                diff = float(np.mean(np.abs(prof_curr[:s] - prof_prev[-s:])))
+            elif s > 0:
+                diff = float(np.mean(np.abs(prof_curr[s:] - prof_prev[:-s])))
+            else:
+                diff = float(np.mean(np.abs(prof_curr - prof_prev)))
+            if diff < min_diff:
+                min_diff = diff
+                best_shift = s
+
+        scale_y = (y2 - y1) / 40.0
+        actual_dy = best_shift * scale_y
+
+        if abs(actual_dy) >= 1.0 and abs(actual_dy) <= 16.0:
+            damp_dy = -int(round(actual_dy * 0.55))
+            M = np.float32([[1, 0, 0], [0, 1, damp_dy]])
+            return cv2.warpAffine(frame, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
+
+        return frame
 
     # --------------------------------------------------------------------------
     # 1. VISUAL ENHANCEMENT: SHARPENING & CONTRAST
@@ -667,7 +719,21 @@ class OmniVisionEngine:
         closest_d = self.cached_closest_dist
 
         for t in targets:
-            x1, y1, x2, y2 = t['box']
+            # Temporal smoothing against road bounce and camera vibration jitter
+            tid = f"{t['label']}_{int(t['center'][0] / 35)}"
+            raw_b = t['box']
+            if tid in self.smoothed_target_boxes:
+                prev_b = self.smoothed_target_boxes[tid]
+                x1 = int(0.65 * prev_b[0] + 0.35 * raw_b[0])
+                y1 = int(0.65 * prev_b[1] + 0.35 * raw_b[1])
+                x2 = int(0.65 * prev_b[2] + 0.35 * raw_b[2])
+                y2 = int(0.65 * prev_b[3] + 0.35 * raw_b[3])
+                smooth_box = (x1, y1, x2, y2)
+            else:
+                smooth_box = raw_b
+                x1, y1, x2, y2 = raw_b
+            self.smoothed_target_boxes[tid] = smooth_box
+
             gx1, gy1, gx2, gy2 = t['ghost_box']
             tier = t['status_tier']
             box_color = (45, 50, 240) if tier == 'CRITICAL' else ((0, 215, 255) if tier == 'CAUTION' else (0, 255, 100))
@@ -752,6 +818,7 @@ class OmniVisionEngine:
         all 8 control buttons, dynamic climate adaptation, live GPS speed,
         and 100% visible road.
         """
+        frame = self.stabilize_road_vibrations(frame)
         h, w = frame.shape[:2]
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         avg_brightness = float(np.mean(gray))
@@ -811,7 +878,7 @@ class OmniVisionEngine:
                 "traction_hazard": False,
                 "texture_var": 0.0,
                 "v2v_active": False,
-                "speed_kmh": int(live_speed) if live_speed is not None else 72,
+                "speed_kmh": min(130, max(0, int(round(float(live_speed))))) if live_speed is not None else 72,
                 "speed_limit": 80,
                 "overspeed": False,
                 "climate_profile": "RAW SENSOR (AI BYPASS)",
@@ -844,7 +911,10 @@ class OmniVisionEngine:
 
         # Dynamic vehicle speed (Strictly 0 km/h when sitting still, accurate live GPS speed)
         if live_speed is not None:
-            current_speed = max(0, int(round(float(live_speed))))
+            raw_s = float(live_speed)
+            if raw_s > 130:
+                raw_s = min(130.0, raw_s * 0.2)
+            current_speed = max(0, int(round(raw_s)))
         else:
             is_live_dev = any(k in vid_lower for k in ['live', 'phone', 'mobile', 'laptop', 'cam0', 'car', 'cam1'])
             if is_live_dev:

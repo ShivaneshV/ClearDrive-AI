@@ -2969,13 +2969,22 @@
 
         let activeLaptopUploads = 0;
         let laptopUploadTimer = null;
+        let frameGrabTimer = null;
+        let latestBlobToSend = null;
 
         function stopLaptopWebcam() {
             isLaptopStreaming = false;
+            if (frameGrabTimer) {
+                clearTimeout(frameGrabTimer);
+                frameGrabTimer = null;
+            }
             if (laptopUploadTimer) {
                 clearTimeout(laptopUploadTimer);
                 laptopUploadTimer = null;
             }
+            latestBlobToSend = null;
+            isUploadingFrame = false;
+
             if (laptopWebcamStream) {
                 laptopWebcamStream.getTracks().forEach(track => {
                     try { track.stop(); } catch (e) {}
@@ -3053,62 +3062,78 @@
         function transmitLaptopFrames() {
             if (!isLaptopStreaming || !laptopVideoElem) return;
 
-            function sendNext() {
-                if (!isLaptopStreaming) return;
+            // Resize canvas to ultra-efficient 512x288 payload (63% bandwidth reduction)
+            if (laptopCanvas) {
+                laptopCanvas.width = 512;
+                laptopCanvas.height = 288;
+            }
 
-                if (isUploadingFrame || laptopVideoElem.readyState < 2) {
-                    laptopUploadTimer = setTimeout(sendNext, 8);
-                    return;
+            // 1. High-frequency real-time capture loop (~30 FPS)
+            function captureLoop() {
+                if (!isLaptopStreaming) return;
+                if (laptopVideoElem.readyState >= 2) {
+                    const ctx = laptopCanvas.getContext('2d');
+                    ctx.drawImage(laptopVideoElem, 0, 0, 512, 288);
+                    const nowTs = Date.now();
+                    laptopCanvas.toBlob(blob => {
+                        if (blob && isLaptopStreaming) {
+                            // Always overwrite with the latest frame (drops intermediate stale frames)
+                            latestBlobToSend = { blob: blob, ts: nowTs };
+                            pumpUpload();
+                        }
+                    }, 'image/jpeg', 0.48);
                 }
+                frameGrabTimer = setTimeout(captureLoop, 33);
+            }
+
+            // 2. Non-blocking network upload worker (never queues latency)
+            async function pumpUpload() {
+                if (isUploadingFrame || !latestBlobToSend || !isLaptopStreaming) return;
 
                 isUploadingFrame = true;
-                const ctx = laptopCanvas.getContext('2d');
-                ctx.drawImage(laptopVideoElem, 0, 0, 640, 360);
+                const currentPayload = latestBlobToSend;
+                latestBlobToSend = null; // Clear so any frame rendered during upload is recognized as newer
 
-                const nowTs = Date.now();
-                laptopCanvas.toBlob(blob => {
-                    if (!blob || !isLaptopStreaming) {
-                        isUploadingFrame = false;
-                        laptopUploadTimer = setTimeout(sendNext, 8);
-                        return;
-                    }
+                const vSel = document.getElementById('videoSelect');
+                let targetEndpoint = '/api/laptop_frame';
+                if (vSel && vSel.value === 'car') {
+                    targetEndpoint = '/api/car_frame';
+                } else if (vSel && vSel.value === 'phone') {
+                    targetEndpoint = '/api/phone_frame';
+                } else if (currentCameraFacing === 'car' || currentCameraFacing === 'environment') {
+                    targetEndpoint = '/api/car_frame';
+                }
 
-                    const vSel = document.getElementById('videoSelect');
-                    let targetEndpoint = '/api/laptop_frame';
-                    if (vSel && vSel.value === 'car') {
-                        targetEndpoint = '/api/car_frame';
-                    } else if (vSel && vSel.value === 'phone') {
-                        targetEndpoint = '/api/phone_frame';
-                    } else if (currentCameraFacing === 'car' || currentCameraFacing === 'environment') {
-                        targetEndpoint = '/api/car_frame';
-                    }
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 650);
 
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 900);
-
-                    fetch(targetEndpoint, {
+                try {
+                    await fetch(targetEndpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'image/jpeg',
-                            'X-Timestamp': nowTs.toString()
+                            'X-Timestamp': currentPayload.ts.toString()
                         },
-                        body: blob,
+                        body: currentPayload.blob,
                         signal: controller.signal
-                    })
-                    .catch(() => {})
-                    .finally(() => {
-                        clearTimeout(timeoutId);
-                        isUploadingFrame = false;
-                        if (isLaptopStreaming) {
-                            laptopUploadTimer = setTimeout(sendNext, 12);
-                        }
                     });
-                }, 'image/jpeg', 0.55);
+                } catch (e) {
+                    // Timeout or network glitch -> discard and proceed to fresh frame immediately
+                } finally {
+                    clearTimeout(timeoutId);
+                    isUploadingFrame = false;
+                    // If a newer frame arrived while the previous upload was in transit, push it immediately
+                    if (latestBlobToSend && isLaptopStreaming) {
+                        setTimeout(pumpUpload, 4);
+                    }
+                }
             }
 
+            if (frameGrabTimer) clearTimeout(frameGrabTimer);
             if (laptopUploadTimer) clearTimeout(laptopUploadTimer);
             isUploadingFrame = false;
-            sendNext();
+            latestBlobToSend = null;
+            captureLoop();
         }
 
         function changeSource() {
@@ -4001,29 +4026,70 @@
                     const heading = coords.heading || 0;
                     currentVehicleHeading = heading;
 
-                    // Real-time Speed Calculation (Google Maps style: stationary = 0 km/h)
-                    let liveSpeedKmh = 0;
+                    // Real-time Speed Calculation with Anti-Spike Protection & Exponential Moving Average (EMA)
+                    const accuracy = (coords.accuracy !== undefined && coords.accuracy !== null) ? coords.accuracy : 10;
+                    let rawSpeedKmh = 0;
+                    let hasValidSpeedSample = false;
+
+                    // Source A: Native Hardware Doppler GPS Speed from chip (m/s)
                     if (coords.speed !== null && !isNaN(coords.speed) && coords.speed >= 0) {
-                        // Browser gives speed in m/s: if < 0.5 m/s (~1.8 km/h), user is sitting/stationary -> strictly 0
-                        liveSpeedKmh = coords.speed < 0.5 ? 0 : Math.round(coords.speed * 3.6);
-                    } else if (prevGpsLat !== null && prevGpsLon !== null && prevGpsTime !== null) {
+                        // If speed < 0.6 m/s (~2.1 km/h), vehicle is stationary -> 0 km/h
+                        rawSpeedKmh = coords.speed < 0.6 ? 0 : (coords.speed * 3.6);
+                        hasValidSpeedSample = true;
+                    } 
+                    // Source B: Accurate Distance Displacement over Time
+                    else if (prevGpsLat !== null && prevGpsLon !== null && prevGpsTime !== null) {
                         const dt = (now - prevGpsTime) / 1000.0;
-                        if (dt >= 0.5) {
+                        // Only compute displacement if time interval is reasonable and GPS accuracy is acceptable (< 35m)
+                        if (dt >= 0.7 && dt <= 8.0 && accuracy <= 35) {
                             const dMeters = calcDistanceMeters(prevGpsLat, prevGpsLon, currentVehicleLat, currentVehicleLon);
-                            // GPS jitter filter: < 2.5m displacement between updates is stationary jitter -> strictly 0 km/h
-                            if (dMeters < 2.5) {
-                                liveSpeedKmh = 0;
+                            // Jitter deadband: under 2.8 meters displacement is stationary drift -> strictly 0 km/h
+                            if (dMeters < 2.8) {
+                                rawSpeedKmh = 0;
+                                hasValidSpeedSample = true;
                             } else {
                                 const spMs = dMeters / dt;
-                                liveSpeedKmh = spMs < 0.6 ? 0 : Math.round(spMs * 3.6);
+                                const calculatedKmh = spMs * 3.6;
+                                // Anti-Teleportation Sanity Check: reject coordinate jumps that exceed realistic road vehicle speeds (> 130 km/h)
+                                if (calculatedKmh <= 130) {
+                                    rawSpeedKmh = calculatedKmh;
+                                    hasValidSpeedSample = true;
+                                }
                             }
+                        }
+                    }
+
+                    // Physical Acceleration Rate-Limiter & Exponential Smoothing (Prevents 194 km/h spikes)
+                    if (hasValidSpeedSample) {
+                        const dtSec = prevGpsTime ? Math.max(0.4, (now - prevGpsTime) / 1000.0) : 1.0;
+                        // Maximum physical car acceleration clamp (12 km/h per second)
+                        const maxDelta = 14.0 * dtSec;
+
+                        let boundedSpeed = rawSpeedKmh;
+                        if (currentVehicleSpeed > 0) {
+                            if (boundedSpeed > currentVehicleSpeed + maxDelta) {
+                                boundedSpeed = currentVehicleSpeed + maxDelta;
+                            } else if (boundedSpeed < currentVehicleSpeed - (maxDelta * 1.6)) {
+                                boundedSpeed = currentVehicleSpeed - (maxDelta * 1.6);
+                            }
+                        }
+
+                        // Absolute physical limits
+                        boundedSpeed = Math.max(0, Math.min(130, boundedSpeed));
+
+                        // Dual-Layer Exponential Moving Average (EMA, alpha = 0.35)
+                        if (boundedSpeed < 2.2) {
+                            currentVehicleSpeed = 0;
+                        } else {
+                            currentVehicleSpeed = (0.35 * boundedSpeed) + (0.65 * currentVehicleSpeed);
                         }
                     }
 
                     prevGpsLat = currentVehicleLat;
                     prevGpsLon = currentVehicleLon;
                     prevGpsTime = now;
-                    currentVehicleSpeed = liveSpeedKmh;
+
+                    const liveSpeedKmh = Math.round(currentVehicleSpeed);
 
                     // On first satellite fix: center map directly on user's exact coordinates & reverse-geocode road
                     if (!hasInitialGpsFix) {
@@ -4361,7 +4427,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=15').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=16').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app

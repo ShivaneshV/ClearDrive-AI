@@ -1128,9 +1128,15 @@ def update_gps():
             live_gps_lon = float(data['lon'])
             live_gps_active = True
         if 'speed' in data and data['speed'] is not None:
-            sp = float(data['speed'])
-            if sp >= 0:
-                live_gps_speed = sp
+            try:
+                sp = float(data['speed'])
+                if 0 <= sp <= 130:
+                    live_gps_speed = sp
+                elif sp > 130:
+                    # Sanity filter against erratic GPS drift spikes
+                    live_gps_speed = min(130.0, live_gps_speed)
+            except (ValueError, TypeError):
+                pass
         if 'heading' in data and data['heading'] is not None:
             live_gps_heading = float(data['heading'])
         if 'altitude' in data and data['altitude'] is not None:
