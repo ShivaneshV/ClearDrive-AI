@@ -208,7 +208,7 @@
     <script>
         const video = document.getElementById('webcamVideo');
         const canvas = document.getElementById('captureCanvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
         const statusPill = document.getElementById('statusPill');
         const hudInfo = document.getElementById('hudInfo');
         const broadcastBtn = document.getElementById('broadcastBtn');
@@ -444,7 +444,7 @@
                 }
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 900);
+                const timeoutId = setTimeout(() => controller.abort(), 160);
 
                 fetch('/api/phone_frame', {
                     method: 'POST',
@@ -473,7 +473,7 @@
                         scheduleNext();
                     }
                 });
-            }, 'image/jpeg', 0.55);
+            }, 'image/jpeg', 0.42);
         }
 
         function stopBroadcast() {
