@@ -831,7 +831,7 @@ def process_video():
 
         # Encode crisp top HD class JPEG buffer with zero macroblocking
         ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
-            int(cv2.IMWRITE_JPEG_QUALITY), 78,
+            int(cv2.IMWRITE_JPEG_QUALITY), 84,
             int(cv2.IMWRITE_JPEG_OPTIMIZE), 1
         ])
 

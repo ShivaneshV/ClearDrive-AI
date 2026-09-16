@@ -2190,7 +2190,7 @@
                     <span>🌫️</span> FOG / RAIN [1]
                 </button>
                 <button class="hud-btn btn-magenta" id="btn-night" onclick="toggleFeature('night')">
-                    <span>🥽</span> GAME NVG [N]
+                    <span>🌙</span> NIGHT VISION [N]
                 </button>
                 <button class="hud-btn btn-cyan" id="btn-lidar" onclick="toggleFeature('lidar')">
                     <span>🌐</span> CYBER-LIDAR [2]
@@ -3066,7 +3066,7 @@
             const isMobileDevice = (window.innerWidth <= 820) || /iphone|ipad|android/i.test(navigator.userAgent);
             const hdWidth = isMobileDevice ? 960 : 1280;
             const hdHeight = isMobileDevice ? 540 : 720;
-            const hdQuality = 0.72;
+            const hdQuality = 0.80;
 
             if (laptopCanvas) {
                 laptopCanvas.width = hdWidth;
@@ -4432,7 +4432,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=17').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=18').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
