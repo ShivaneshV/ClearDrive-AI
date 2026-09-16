@@ -776,10 +776,17 @@ def process_video():
         if camera_flip_h:
             raw_frame = cv2.flip(raw_frame, 1)
 
-        if raw_frame.shape[1] == 640 and raw_frame.shape[0] == 360:
-            frame = raw_frame
+        # Top HD Class Frame Processing: Maintain crystal-clear widescreen HD
+        h_raw, w_raw = raw_frame.shape[:2]
+        if w_raw >= 960 and h_raw >= 540:
+            if w_raw > 1280 or h_raw > 720:
+                frame = cv2.resize(raw_frame, (1280, 720), interpolation=cv2.INTER_AREA)
+            else:
+                frame = raw_frame
+        elif w_raw > 0 and h_raw > 0:
+            frame = cv2.resize(raw_frame, (960, 540), interpolation=cv2.INTER_CUBIC)
         else:
-            frame = cv2.resize(raw_frame, (640, 360), interpolation=cv2.INTER_LINEAR)
+            frame = raw_frame
 
         # Run Next-Gen Omni-Vision Predictive ADAS Pipeline
         active_video_source = src if src in ['laptop', 'cam0', '0', 'phone', 'mobile', 'car', 'cam1', '1'] else current_video_file
@@ -822,10 +829,10 @@ def process_video():
 
         v2v_status_str = f"{active_v2v_payload['event']} ({active_v2v_payload['distance']})" if active_v2v_payload else "V2V MESH ACTIVE // LISTENING"
 
-        # Encode crisp HD JPEG buffer for crystal-clear video streaming
+        # Encode crisp top HD class JPEG buffer with zero macroblocking
         ret_enc, buf_enc = cv2.imencode('.jpg', dashboard_frame, [
-            int(cv2.IMWRITE_JPEG_QUALITY), 58,
-            int(cv2.IMWRITE_JPEG_OPTIMIZE), 0
+            int(cv2.IMWRITE_JPEG_QUALITY), 78,
+            int(cv2.IMWRITE_JPEG_OPTIMIZE), 1
         ])
 
         # Update Live Telemetry & Notify Waiting Stream Clients

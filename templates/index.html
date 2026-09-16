@@ -2190,7 +2190,7 @@
                     <span>🌫️</span> FOG / RAIN [1]
                 </button>
                 <button class="hud-btn btn-magenta" id="btn-night" onclick="toggleFeature('night')">
-                    <span>🌙</span> NIGHT VISION [N]
+                    <span>🥽</span> GAME NVG [N]
                 </button>
                 <button class="hud-btn btn-cyan" id="btn-lidar" onclick="toggleFeature('lidar')">
                     <span>🌐</span> CYBER-LIDAR [2]
@@ -2891,8 +2891,8 @@
                             stream = await navigator.mediaDevices.getUserMedia({
                                 video: {
                                     deviceId: { exact: selectedDev.deviceId },
-                                    width: { ideal: 640 },
-                                    height: { ideal: 360 }
+                                    width: { ideal: 1280, min: 640 },
+                                    height: { ideal: 720, min: 360 }
                                 },
                                 audio: false
                             });
@@ -2914,8 +2914,8 @@
                         stream = await navigator.mediaDevices.getUserMedia({
                             video: {
                                 facingMode: { ideal: facingTarget },
-                                width: { ideal: 640 },
-                                height: { ideal: 360 }
+                                width: { ideal: 1280, min: 640 },
+                                height: { ideal: 720, min: 360 }
                             },
                             audio: false
                         });
@@ -3062,10 +3062,15 @@
         function transmitLaptopFrames() {
             if (!isLaptopStreaming || !laptopVideoElem) return;
 
-            // Resize canvas to ultra-efficient 512x288 payload (63% bandwidth reduction)
+            // High-Definition Capture Canvas: 960x540 Widescreen HD / 1280x720 Laptop HD
+            const isMobileDevice = (window.innerWidth <= 820) || /iphone|ipad|android/i.test(navigator.userAgent);
+            const hdWidth = isMobileDevice ? 960 : 1280;
+            const hdHeight = isMobileDevice ? 540 : 720;
+            const hdQuality = 0.72;
+
             if (laptopCanvas) {
-                laptopCanvas.width = 512;
-                laptopCanvas.height = 288;
+                laptopCanvas.width = hdWidth;
+                laptopCanvas.height = hdHeight;
             }
 
             // 1. High-frequency real-time capture loop (~30 FPS)
@@ -3073,7 +3078,7 @@
                 if (!isLaptopStreaming) return;
                 if (laptopVideoElem.readyState >= 2) {
                     const ctx = laptopCanvas.getContext('2d');
-                    ctx.drawImage(laptopVideoElem, 0, 0, 512, 288);
+                    ctx.drawImage(laptopVideoElem, 0, 0, hdWidth, hdHeight);
                     const nowTs = Date.now();
                     laptopCanvas.toBlob(blob => {
                         if (blob && isLaptopStreaming) {
@@ -3081,7 +3086,7 @@
                             latestBlobToSend = { blob: blob, ts: nowTs };
                             pumpUpload();
                         }
-                    }, 'image/jpeg', 0.48);
+                    }, 'image/jpeg', hdQuality);
                 }
                 frameGrabTimer = setTimeout(captureLoop, 33);
             }
@@ -4427,7 +4432,7 @@
         let deferredPWAInstallPrompt = null;
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=16').then((reg) => {
+                navigator.serviceWorker.register('/sw.js?v=17').then((reg) => {
                     // Check for updates whenever user loads the page
                     reg.update().catch(() => {});
                     // Check for updates when mobile user returns to the app
