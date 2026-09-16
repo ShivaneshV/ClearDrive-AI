@@ -776,13 +776,12 @@ def process_video():
         if camera_flip_h:
             raw_frame = cv2.flip(raw_frame, 1)
 
-        # Top HD Class Frame Processing: Maintain crystal-clear widescreen HD
+        # Top HD Class Frame Processing: Standardized 16:9 Widescreen (960x540) for 30+ FPS Zero-Lag
         h_raw, w_raw = raw_frame.shape[:2]
-        if w_raw >= 960 and h_raw >= 540:
-            if w_raw > 1280 or h_raw > 720:
-                frame = cv2.resize(raw_frame, (1280, 720), interpolation=cv2.INTER_AREA)
-            else:
-                frame = raw_frame
+        if w_raw == 960 and h_raw == 540:
+            frame = raw_frame
+        elif w_raw > 960 and h_raw > 540:
+            frame = cv2.resize(raw_frame, (960, 540), interpolation=cv2.INTER_AREA)
         elif w_raw > 0 and h_raw > 0:
             frame = cv2.resize(raw_frame, (960, 540), interpolation=cv2.INTER_LINEAR)
         else:
